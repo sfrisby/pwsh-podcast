@@ -1,0 +1,26 @@
+
+title       : Last Podcast On The Left
+url         : https://feeds.simplecast.com/dCXMIpJz
+author      : The Last Podcast Network
+description : The Last Podcast on the Left covers all the horrors our world has to offer, both imagined and real. From demons and slashers to cults and serial killers, The Last Podcast is guaranteed to satisfy your bloodlust.
+
+title       : Last Jedi On The Left Podcast
+url         : https://feeds.acast.com/public/shows/63df9ab002e9850011b3df2d
+author      : Aaron Lewis
+description : Aaron Lewis is here to talk all thing film & TV. This will feature reviews, top 5s, and retrospectives. Hosted by Aaron and featuring a rotation of guests. Hosted on Acast. See acast.com/privacy for more information.
+
+title       : The Last Podcast On The Left
+url         : https://www.spreaker.com/show/5716786/episodes/feed
+author      : Sarah Taylor
+description : If you want to learn or talk about it...then lets dish!T
+
+title       : The Last Tavern On The Left Podcast
+url         : https://www.spreaker.com/show/4511736/episodes/feed
+author      : The Villains Demand
+description : We're just a bunch of guys having some laughs and playing Dungeons and Dragons along with other RPGs. WARNING! We have no filter, that's where the laughs come from.We love playing RPGs, particularity Dungeons and Dragons, which we have been playing forever. We decided to set up some mics and record out adventures with some of our closest friends and comrades.
+
+title       : The Last Podcast On The Left
+url         : https://anchor.fm/s/cda7c22c/podcast/rss
+author      : All Things Horror
+description : A horror movie review podcast where I will be reviewing all types of horror movies from slashers to supernatural to found footage and many more. Dissecting every scene and giving my honest thoughts.
+
