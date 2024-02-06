@@ -13,10 +13,10 @@ $podcast = @{
   madiganpubcast     = "madigan's pubcast"
   lpotl              = "last podcast on the left"
   open2debate        = "open to debate"
-
+  nprpolitics        = "NPR Politics"
 }
 
-$search = $podcast.pbsnewshour
+$search = $podcast.nprpolitics
 
 $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
 $session.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
