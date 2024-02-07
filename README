@@ -1,0 +1,3 @@
+Searching and downloading podcasts is performed in main.ps1.
+
+Playing the downloaded file is performed by VLC and is performed in working-with-vlc-to-play-media.ps1.

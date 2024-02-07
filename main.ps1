@@ -1,4 +1,91 @@
-. .\ConvertFrom-XML.ps1 # Required for ConvertFrom-XML function.
+<# 
+https://github.com/Phil-Factor/PowerShell-Utility-Cmdlets/blob/main/ConvertFrom-XML/ConvertFrom-XML.ps1
+
+convert any simple XML document into an ordered hashtable. 
+#>
+function ConvertFrom-XML {
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(Mandatory = $true, ValueFromPipeline)]
+        [System.Xml.XmlNode]$node,
+        #we are working through the nodes
+
+        [string]$Prefix = '',
+        #do we indicate an attribute with a prefix?
+
+        $ShowDocElement = $false #Do we show the document element? 
+    )
+	
+    process {
+        #if option set, we skip the Document element
+        if ($node.DocumentElement -and !($ShowDocElement))
+        { $node = $node.DocumentElement }
+        $oHash = [ordered] @{ } # start with an ordered hashtable.
+        #The order of elements is always significant regardless of what they are
+        write-verbose "calling with $($node.LocalName)"
+        if ($null -ne $node.Attributes) {
+            #if there are elements
+            # record all the attributes first in the ordered hash
+            $node.Attributes | ForEach-Object {
+                $oHash.$($Prefix + $_.FirstChild.parentNode.LocalName) = $_.FirstChild.value
+            }
+        }
+        # check to see if there is a pseudo-array. (more than one
+        # child-node with the same name that must be handled as an array)
+        $node.ChildNodes | #we just group the names and create an empty array for each
+        Group-Object -Property LocalName | where-object { $_.count -gt 1 } | Select-Object Name |
+        ForEach-Object {
+            write-verbose "pseudo-Array $($_.Name)"
+            $oHash.($_.Name) = @() <# create an empty array for each one#>
+        };
+        foreach ($child in $node.ChildNodes) {
+            #now we look at each node in turn.
+            write-verbose "processing the '$($child.LocalName)'"
+            $childName = $child.LocalName
+            if ($child -is [system.xml.xmltext]) {
+                # if it is simple XML text 
+                write-verbose "simple xml $childname";
+                $oHash.$childname += $child.InnerText
+            }
+            # if it has a #text child we may need to cope with attributes
+            elseif ($child.FirstChild.Name -eq '#text' -and $child.ChildNodes.Count -eq 1) {
+                write-verbose "text";
+                if ($null -ne $child.Attributes) {
+                    # an attribute; we need to record the text with the #text label and preserve all the attributes
+                    $aHash = [ordered]@{ };
+                    $child.Attributes | ForEach-Object {
+                        $aHash.$($_.FirstChild.parentNode.LocalName) = $_.FirstChild.value
+                    }
+                    #now we add the text with an explicit name
+                    $aHash.'#text' += $child.'#text'
+                    $oHash.$childname += $aHash
+                }
+                else {
+                    #phew, just a simple text attribute. 
+                    $oHash.$childname += $child.FirstChild.InnerText
+                }
+            }
+            elseif ($null -ne $child.'#cdata-section') {
+                # if it is a data section, a block of text that isnt parsed by the parser,
+                # but is otherwise recognized as markup
+                write-verbose "cdata section";
+                $oHash.$childname = $child.'#cdata-section'
+            }
+            elseif ($child.ChildNodes.Count -gt 1 -and ($child | Get-Member -MemberType Property).Count -eq 1) {
+                $oHash.$childname = @()
+                foreach ($grandchild in $child.ChildNodes) {
+                    $oHash.$childname += (ConvertFrom-XML $grandchild)
+                }
+            }
+            else {
+                # create an array as a value  to the hashtable element
+                $oHash.$childname += (ConvertFrom-XML $child)
+            }
+        }
+        $oHash
+    }
+}
 
 function Invoke-CastosPodcastSearch {
     param (
@@ -44,7 +131,7 @@ function Invoke-CastosPodcastSearch {
     $results
 }
 
-function Get-PodcastEpisodesByUri {
+function Get-PodcastEpisodes {
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline)]
         [string]$URI
@@ -70,7 +157,7 @@ function Get-PodcastEpisodesByUri {
     $table
 }
 
-function DownloadPodcastByURI {
+function Get-PodcastEpisode {
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline)]
         [string]$URI,
@@ -101,52 +188,91 @@ function SanitizeString() {
     $ToSanitize
 }
 
-$Podcasts = @{
-    npr_politics     = "npr politics"
-    pbs_newshour     = "pbs newshour"
-    stuff_u_s_know   = "stuff you should know"
-    madigans_pubcast = "madigan's pubcast"
-    last_p_o_t_l     = "last podcast on the left"
-    open_to_debate   = "open to debate"
-}
-# TODO take user input ~ $search = Read-Host "Search for podcast by name: "
-#$search = $Podcasts.pbs_newshour
-$search = $Podcasts.npr_politics
-$found = Invoke-CastosPodcastSearch -Podcast $search
-
-
-# Calculating necessary padding to display the podcasts found.
-$extraPadding = 2
-$titlePadding = $($($($found.title) | ForEach-Object { $_.length }) | Measure-Object -Maximum).Maximum + $extraPadding
-$urlPadding = $($($($found.url) | ForEach-Object { $_.length }) | Measure-Object -Maximum).Maximum + $extraPadding
-$indexPadding = $found.Count.ToString().Length
-$found | ForEach-Object { # Creating console output: index  title  url
-    $($found.indexof($_)).tostring().padleft($indexPadding) + 
-    " " + $($_.title).padleft($titlePadding) + 
-    " " + $($_.url).PadLeft($urlPadding) 
+$Podcasts = @( 
+    "npr politics",
+    "pbs newshour",
+    "stuff you should know",
+    "madigan's pubcast",
+    "last podcast on the left",
+    "open to debate",
+    "science vs"
+)
+$Podcasts | ForEach-Object {
+    $([string]$Podcasts.indexof($_) + " - " + $_)
 }
 
+$search = ""
+$choice = Read-Host "Provide a number or search for a podcast"
+try {
+    $search = $Podcasts[[int]::Parse($choice)]
+}
+catch [System.FormatException] {
+    $search = $choice
+}
+catch [System.Exception] {
+    throw $_
+}
+Write-Host "Searching for '$search' podcasts ..."
+$results = Invoke-CastosPodcastSearch -Podcast $search
+if ($results.Count -eq 0) {
+    throw [System.RankException] "No podcasts were found using the term '$search'."
+}
+elseif ($results.Count -eq 1) {
+    write-host "Only one podcast was found:"
+    $results[0]
+}
+else {
+    # Calculating necessary padding to display the podcasts found.
+    $extraPadding = 2
+    $titlePadding = $($($($results.title) | ForEach-Object { $_.length }) | Measure-Object -Maximum).Maximum + $extraPadding
+    $urlPadding = $($($($results.url) | ForEach-Object { $_.length }) | Measure-Object -Maximum).Maximum + $extraPadding
+    $indexPadding = $results.Count.ToString().Length
+    $results | ForEach-Object { # Creating console output: index  title  url
+        $($results.indexof($_)).tostring().padleft($indexPadding) + 
+        " " + $($_.title).padleft($titlePadding) + 
+        " " + $($_.url).PadLeft($urlPadding) 
+    }
+}
 
-# TODO take user input ~ $podcast = read-host -prompt "Select podcast by number: "
-$podcast = $found[0]
-Write-Host "Selected '$($podcast.title)'. Gathering episodes ..."
-$episodes = Get-PodcastEpisodesByUri -URI $podcast.url
+
+# Obtain desired podcast or return results if there is only 1 result.
+$podcast = ""
+if ($results.Count -eq 1) {
+    Write-Host "Gathering '$($results[0].title)' episodes ..."
+    $podcast = $results[0]
+}
+else {
+    $choice = read-host -prompt "Select podcast by number: "
+    try {
+        $podcast = $results[[int]::Parse($choice)]
+    }
+    catch {
+        throw $_
+    }
+    Write-Host "Selected '$($podcast.title)'. Gathering episodes ..."
+}
+$episodes = Get-PodcastEpisodes -URI $podcast.url
 
 
-# Duplicates in the title bork the padding
+# Duplicates coming from XML conversion, silly XML object nonsense.
+# Attempting to elliminate title duplicates to prevent padding issues.
 if ($episodes.title.Count -gt 1) {
     $episodes | ForEach-Object {
         if ($_.title.Keys -contains '#text') {
             $tmp = $_.title[0].'#text'
             $_.title = $tmp
-        } else {
+        }
+        elseif ($_.title.Count -eq 1 -and $_.title.GetType() -eq [string]) {
+            # just ignore since there is only 1?
+        }
+        else {
             throw "Unexpected Key for episode title was found."
         }
     }
 }
 
 # Calculating necessary padding to display the episodes found.
-$episodesListedAmount = 5
+$episodesListedAmount = 8
 $episodeTitlePadding = $($($episodes.title | Select-Object -First $episodesListedAmount) | ForEach-Object { $_.length } | Measure-Object -Maximum).Maximum
 $indexPadding = $episodes.Count.ToString().Length
 $episodes | Select-Object -First $episodesListedAmount | ForEach-Object { # Creating console output: index  episode-title
@@ -155,11 +281,20 @@ $episodes | Select-Object -First $episodesListedAmount | ForEach-Object { # Crea
 }
 
 
-# TODO take user input ~ episode = Read-Host -prompt "Select episode by number: "
-$episode = $episodes[0]
-Write-Host "Episode selected was: '$($episode.title)'."
+$episode = ""
+$choice = Read-Host -prompt "Select episode by number: "
+try {
+    $episode = $episodes[[int]::Parse($choice)]
+    Write-Host "Episode selected was: '$($episode.title)'."
+}
+catch {
+    Write-Host "Unknown exception has occurred."
+    throw $_
+}
+
+
 $title = SanitizeString -ToSanitize $episode.title
 $file = join-path (Get-location) "${title}.mp3"
 $url = $episode.enclosure.url
-DownloadPodcastByURI -URI $url -Path $file
+Get-PodcastEpisode -URI $url -Path $file
 
