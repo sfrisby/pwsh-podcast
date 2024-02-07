@@ -157,11 +157,25 @@ function Get-PodcastEpisodes {
     $table
 }
 
+function SanitizeString() {
+    param (
+        [Parameter(Mandatory = $true, ValueFromPipeline)]
+        [string]$ToSanitize
+    )
+    [System.IO.Path]::GetInvalidFileNameChars() | ForEach-Object { 
+        $tmp = $ToSanitize.replace("$_", "")
+        if ($tmp.Length -lt $ToSanitize.Length) {
+            Write-Host "Invalid character '${_}' found; removing ..."
+            $ToSanitize = $tmp
+        }
+    }
+    $ToSanitize
+}
+
 function Get-PodcastEpisode {
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline)]
         [string]$URI,
-
         [ValidateScript({ 
                 $(Test-Path -Path $_ -PathType Leaf -IsValid) -and 
                 $($_.Name -notmatch [System.IO.Path]::GetInvalidFileNameChars()) 
@@ -173,55 +187,58 @@ function Get-PodcastEpisode {
     Invoke-WebRequest -Uri $URI -OutFile $Path
 }
 
-function SanitizeString() {
-    param (
-        [Parameter(Mandatory = $true, ValueFromPipeline)]
-        [string]$ToSanitize,
-        $Invalid = $([System.IO.Path]::GetInvalidFileNameChars() -join '')
-    )
-    $ToSanitize.ToCharArray() | ForEach-Object {
-        if ($Invalid -match $_) {
-            $ToSanitize = $ToSanitize.replace("$_", "")
-            write-host "Sanitized '$_' from podcast title."
-        }
-    }
-    $ToSanitize
+# Go straight to episodes when selecting a previous feed.
+$PODCASTS = @{
+    'npr politics'             = "https://feeds.npr.org/510310/podcast.xml"
+    'pbs newshour full'        = "https://www.pbs.org/newshour/feeds/rss/podcasts/show"
+    'stuff you should know'    = "https://omnycontent.com/d/playlist/e73c998e-6e60-432f-8610-ae210140c5b1/A91018A4-EA4F-4130-BF55-AE270180C327/44710ECC-10BB-48D1-93C7-AE270180C33E/podcast.rss"
+    'madigans pubcast'         = "https://rss.art19.com/madigans-pubcast"
+    'last podcast on the left' = "https://feeds.simplecast.com/dCXMIpJz"
+    'open to debate'           = "https://feeds.megaphone.fm/PNP1207584390"
+    'science vs'               = "https://feeds.megaphone.fm/sciencevs"
+    'intelligence squared'     = "https://feeds.megaphone.fm/NSR6363847171"
+    'philosophize this'        = "https://feeds.megaphone.fm/QCD6036500916"
+} 
+
+$PODCASTS.Keys | ForEach-Object {
+    $([string]$($PODCASTS.Keys).indexof($_) + " - " + $_)
 }
 
-$Podcasts = @( 
-    "npr politics",
-    "pbs newshour",
-    "stuff you should know",
-    "madigan's pubcast",
-    "last podcast on the left",
-    "open to debate",
-    "science vs"
-)
-$Podcasts | ForEach-Object {
-    $([string]$Podcasts.indexof($_) + " - " + $_)
-}
+$isReadyForEpisodes = $false
+$isReadyForPodcastSearch = $false
 
 $search = ""
-$choice = Read-Host "Provide a number or search for a podcast"
+$results = ""
+$podcast = @{
+    'title' = "" 
+    'url'   = ""
+}
+$choice = Read-Host "Provide a podcast number (above) to list its episodes or 's' for search mode"
 try {
-    $search = $Podcasts[[int]::Parse($choice)]
+    $index = [int]::Parse($choice)
+    $search = $index
+    $isReadyForEpisodes = $true
 }
 catch [System.FormatException] {
+    if ($choice -eq "s") {
+        $isReadyForPodcastSearch = $true
+        $choice = Read-Host "Enter the name of the podcast to search for"
+    }
     $search = $choice
+    Write-Host "Searching for '$search' podcasts ..."
+    $results = Invoke-CastosPodcastSearch -Podcast $search
 }
-catch [System.Exception] {
-    throw $_
-}
-Write-Host "Searching for '$search' podcasts ..."
-$results = Invoke-CastosPodcastSearch -Podcast $search
-if ($results.Count -eq 0) {
+
+if ($results.Count -eq 0 -and $isReadyForPodcastSearch -and !$isReadyForEpisodes) {
     throw [System.RankException] "No podcasts were found using the term '$search'."
 }
-elseif ($results.Count -eq 1) {
-    write-host "Only one podcast was found:"
+elseif ($results.Count -eq 1 -and $isReadyForPodcastSearch -and !$isReadyForEpisodes) {
+    write-host "Only one podcast was found"
     $results[0]
+    $podcast.title = $results[0].title
+    $podcast.url = $results[0].url
 }
-else {
+elseif ($isReadyForPodcastSearch -and !$isReadyForEpisodes ) {
     # Calculating necessary padding to display the podcasts found.
     $extraPadding = 2
     $titlePadding = $($($($results.title) | ForEach-Object { $_.length }) | Measure-Object -Maximum).Maximum + $extraPadding
@@ -232,66 +249,65 @@ else {
         " " + $($_.title).padleft($titlePadding) + 
         " " + $($_.url).PadLeft($urlPadding) 
     }
-}
-
-
-# Obtain desired podcast or return results if there is only 1 result.
-$podcast = ""
-if ($results.Count -eq 1) {
-    Write-Host "Gathering '$($results[0].title)' episodes ..."
-    $podcast = $results[0]
-}
-else {
-    $choice = read-host -prompt "Select podcast by number: "
     try {
-        $podcast = $results[[int]::Parse($choice)]
+        $choice = read-host -prompt "Select podcast by number (above)"
+        $index = [int]::Parse($choice)
+        $podcast = $results[$index]
     }
-    catch {
-        throw $_
+    catch [System.FormatException] {
+        throw "A number was not provided. Unable to proceede."
     }
-    Write-Host "Selected '$($podcast.title)'. Gathering episodes ..."
 }
-$episodes = Get-PodcastEpisodes -URI $podcast.url
 
+# Only execute if a search was not performed.
+if ($isReadyForEpisodes -and !$isReadyForPodcastSearch) {
+    $podcast.title = $($PODCASTS.Keys)[$search]
+    $podcast.url = $($PODCASTS.Values)[$search]
+}
+
+Write-Host "Selected '$($podcast.title)'. Gathering episodes ..."
+$episodes = Get-PodcastEpisodes -URI $podcast.url
 
 # Duplicates coming from XML conversion, silly XML object nonsense.
 # Attempting to elliminate title duplicates to prevent padding issues.
-if ($episodes.title.Count -gt 1) {
-    $episodes | ForEach-Object {
-        if ($_.title.Keys -contains '#text') {
-            $tmp = $_.title[0].'#text'
-            $_.title = $tmp
-        }
-        elseif ($_.title.Count -eq 1 -and $_.title.GetType() -eq [string]) {
-            # just ignore since there is only 1?
-        }
-        else {
-            throw "Unexpected Key for episode title was found."
-        }
+$episodes | ForEach-Object {
+    if ($_.title.Count -eq 1 -and $_.title.Keys -notcontains '#text') {
+        # Desired and expected - just continue
+    }
+    elseif ($_.title.Keys -contains '#text' -and $_.title.Keys.Count -gt 1) {
+        $tmp = $_.title[0].'#text'
+        $_.title = $tmp
+    }
+    elseif ($_.title.Keys -contains '#text') {
+        $tmp = $_.title.'#text'
+        $_.title = $tmp
+    }
+    elseif ($_.title.Count -ne 1 -and $_.title.GetType() -ne [string]) {
+        throw "Unexpected episode title Key was found."
     }
 }
 
+
 # Calculating necessary padding to display the episodes found.
+# TODO needs option to list all episodes
+$episodeExtraPadding = 3
 $episodesListedAmount = 8
 $episodeTitlePadding = $($($episodes.title | Select-Object -First $episodesListedAmount) | ForEach-Object { $_.length } | Measure-Object -Maximum).Maximum
+$episodePubDatePadding = $($($episodes.pubDate | Select-Object -First $episodesListedAmount) | ForEach-Object { $_.length } | Measure-Object -Maximum).Maximum + $episodeExtraPadding
 $indexPadding = $episodes.Count.ToString().Length
-$episodes | Select-Object -First $episodesListedAmount | ForEach-Object { # Creating console output: index  episode-title
+$episodes | Select-Object -First $episodesListedAmount | ForEach-Object { # Creating console output: index  episode-title  date
     $($episodes.indexof($_)).tostring().padleft($indexPadding) + 
-    " " + $($_.title).padleft($episodeTitlePadding)
+    " | " + $($_.title).padleft($episodeTitlePadding) +
+    " | " + $($_.pubDate.Values).padleft($episodePubDatePadding)
 }
-
-
-$episode = ""
-$choice = Read-Host -prompt "Select episode by number: "
+$choice = Read-Host -prompt "Select episode by number"
 try {
     $episode = $episodes[[int]::Parse($choice)]
     Write-Host "Episode selected was: '$($episode.title)'."
 }
-catch {
-    Write-Host "Unknown exception has occurred."
-    throw $_
+catch [System.FormatException] {
+    throw "A number was not provided. Unable to proceede."
 }
-
 
 $title = SanitizeString -ToSanitize $episode.title
 $file = join-path (Get-location) "${title}.mp3"

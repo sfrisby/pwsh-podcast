@@ -16,7 +16,13 @@ function PlayMediaWithVlc {
 # Play a single file
 $file = Get-ChildItem -Filter "*.mp3"
 if ($null -ne $file.Name -and $file.Name.Count -gt 1) {
-    $listedAmount = 5
+    $listedAmount = 10
+
+    while ($file.Count -gt $listedAmount) {
+        Write-Host "More files found than the default. Increasing amount by $listedAmount."
+        $listedAmount += $listedAmount
+    }
+
     $extraPadding = 1
     $indexPadding = $file.Count.ToString().Length + $extraPadding
     $namePadding = $($($file.name | Select-Object -First $listedAmount) | ForEach-Object { $_.length } | Measure-Object -Maximum).Maximum + $extraPadding
@@ -26,10 +32,10 @@ if ($null -ne $file.Name -and $file.Name.Count -gt 1) {
             $($_.Name).padleft($namePadding)
         } else {
             $($($file.indexof($_)).tostring() + " --- ").padleft($indexPadding) + 
-            $($_.Name).padleft($namePadding)
+            $($_.Name).padleft($namePadding).Replace('   ','---')
         }
     }
-    $choice = Read-Host -Prompt "Multiple files found. Specify which file to play (by #): "
+    $choice = Read-Host -Prompt "Multiple files found. Specify which file to play (above)"
     $file = $file[$choice]
     write-host "$choice selects $file."
 } elseif ($file.Length -eq 0) {
