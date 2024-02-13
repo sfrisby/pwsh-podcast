@@ -87,49 +87,7 @@ function ConvertFrom-XML {
     }
 }
 
-function Invoke-CastosPodcastSearch {
-    param (
-        [Parameter(Mandatory = $true, ValueFromPipeline)]
-        [string]$Podcast
-    )
-    $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-    $session.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-    $session.Cookies.Add((New-Object System.Net.Cookie("tlf_58", "1", "/", "castos.com")))
-    $session.Cookies.Add((New-Object System.Net.Cookie("tve_leads_unique", "1", "/", "castos.com")))
-    $session.Cookies.Add((New-Object System.Net.Cookie("tl_21131_21132_58", "a%3A1%3A%7Bs%3A6%3A%22log_id%22%3BN%3B%7D", "/", "castos.com")))
-    $response = Invoke-WebRequest -UseBasicParsing -Uri "https://castos.com/wp-admin/admin-ajax.php" `
-        -Method "POST" `
-        -WebSession $session `
-        -Headers @{
-        "authority"          = "castos.com"
-        "method"             = "POST"
-        "path"               = "/wp-admin/admin-ajax.php"
-        "scheme"             = "https"
-        "accept"             = "*/*"
-        "accept-encoding"    = "gzip, deflate, br"
-        "accept-language"    = "en-US,en;q=0.7"
-        "cache-control"      = "no-cache"
-        "origin"             = "https://castos.com"
-        "pragma"             = "no-cache"
-        "referer"            = "https://castos.com/tools/find-podcast-rss-feed/"
-        "sec-ch-ua"          = "`"Not A(Brand`";v=`"99`", `"Brave`";v=`"121`", `"Chromium`";v=`"121`""
-        "sec-ch-ua-mobile"   = "?0"
-        "sec-ch-ua-platform" = "`"Windows`""
-        "sec-fetch-dest"     = "empty"
-        "sec-fetch-mode"     = "cors"
-        "sec-fetch-site"     = "same-origin"
-        "sec-gpc"            = "1"
-    } `
-        -ContentType "multipart/form-data; boundary=----WebKitFormBoundaryEvNAMJxBVu6aUrB3" `
-        -Body ([System.Text.Encoding]::UTF8.GetBytes("------WebKitFormBoundaryEvNAMJxBVu6aUrB3$([char]13)$([char]10)Content-Disposition: form-data; name=`"search`"$([char]13)$([char]10)$([char]13)$([char]10)$($Podcast)$([char]13)$([char]10)------WebKitFormBoundaryEvNAMJxBVu6aUrB3$([char]13)$([char]10)Content-Disposition: form-data; name=`"action`"$([char]13)$([char]10)$([char]13)$([char]10)feed_url_lookup_search$([char]13)$([char]10)------WebKitFormBoundaryEvNAMJxBVu6aUrB3--$([char]13)$([char]10)"))
-    
-    $results = ""
-    if ( $response.StatusCode -ne 200 ) {
-        Throw "Response code was: $($response.StatusCode) | $($response.StatusDescription)."
-    }
-    $results = $($response.Content | ConvertFrom-json).data
-    $results
-}
+. .\Invoke-CastosPodcastSearch.ps1
 
 function Get-PodcastEpisodes {
     param (
@@ -187,17 +145,11 @@ function Get-PodcastEpisode {
     Invoke-WebRequest -Uri $URI -OutFile $Path
 }
 
-# Go straight to episodes when selecting a previous feed.
-$PODCASTS = @{
-    'npr politics'             = "https://feeds.npr.org/510310/podcast.xml"
-    'pbs newshour full'        = "https://www.pbs.org/newshour/feeds/rss/podcasts/show"
-    'stuff you should know'    = "https://omnycontent.com/d/playlist/e73c998e-6e60-432f-8610-ae210140c5b1/A91018A4-EA4F-4130-BF55-AE270180C327/44710ECC-10BB-48D1-93C7-AE270180C33E/podcast.rss"
-    'madigans pubcast'         = "https://rss.art19.com/madigans-pubcast"
-    'last podcast on the left' = "https://feeds.simplecast.com/dCXMIpJz"
-    'open to debate'           = "https://feeds.megaphone.fm/PNP1207584390"
-    'science vs'               = "https://feeds.megaphone.fm/sciencevs"
-    'intelligence squared'     = "https://feeds.megaphone.fm/NSR6363847171"
-    'philosophize this'        = "https://feeds.megaphone.fm/QCD6036500916"
+# Go straight to episodes when selecting a feed.
+$settings = $(get-content -Path .\settings.json -Raw | ConvertFrom-Json)
+$PODCASTS = @{}
+$settings.podcast_feeds.psobject.properties | ForEach-Object {
+    $PODCASTS[$_.Name] = $_.Value
 } 
 
 $PODCASTS.Keys | ForEach-Object {
