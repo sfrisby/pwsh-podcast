@@ -1,3 +1,22 @@
-Searching and downloading podcasts is performed in main.ps1.
+# Podcasts in PowerShell
 
-Playing the downloaded file is performed by VLC and is performed in working-with-vlc-to-play-media.ps1.
+This project contains simple boilerplate for maintaining and playing podcasts through PowerShell. 
+
+Both a console and Windows Forms GUI are provided. However, setup and podcast feed gathering is **only** performed via the console.
+
+VLC (Windows 64 bit version) is used for playing media files. It expects VLC to be located at the 'default' install location, i.e: 
+> C:\Program Files\VideoLAN\VLC\vlc.exe.
+
+## Getting Started
+
+From the console, run the **setup.ps1** script. This will setup configuration and JSON files for organizing and maintaining podcasts and their episodes. File names and their respective prefixes may be modified within **config.ini** - *HOWEVER* - do so with caution.
+
+Next, run the **create-update-feeds.ps1** script and follow its instructions to add podcasts.
+
+Now you may listen to podcasts by running **main.ps1** or **main_gui.ps1**.
+
+All files created or downloaded are stored in the project folder.
+
+## Known Issues
+
+The URL provided be an episode may not stream using VLC. In these cases, specify to download and then play. Downloads only occur if a local file is not found.
