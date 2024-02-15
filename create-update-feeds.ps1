@@ -1,46 +1,13 @@
-# TODO replace
-$settings = $(get-content -Path .\settings.json -Raw | ConvertFrom-Json)
-
-. .\Invoke-CastosPodcastSearch.ps1
+$settings_file = 'conf.json'
+$settings = $(get-content -Path $settings_file -Raw | ConvertFrom-Json)
 
 . .\utils.ps1
-function write-host-choices() {
-    Write-Host " s > search and add a new podcast"
-    Write-Host " l > list all podcasts"
-    Write-Host " r > remove a podcast"
-    Write-Host " q > quit"
-}
 
-# Calculating padding to display for the podcasts found.
-function displayPodcastsFeeds() {
-    param(
-        [Parameter(Mandatory = $true)]
-        [ValidateScript( { $($null -ne $_) -and $($_.count -ne 0) })]
-        [array] $Podcasts
-    )
-    $extraPadding = 3
-    $titlePadding = $($($($Podcasts) | ForEach-Object { $_.title.length }) | Measure-Object -Maximum).Maximum + $extraPadding
-    $authorPadding = $($($($Podcasts) | ForEach-Object { $_.author.length }) | Measure-Object -Maximum).Maximum + $extraPadding
-    $urlPadding = $($($($Podcasts) | ForEach-Object { $_.url.length }) | Measure-Object -Maximum).Maximum + $extraPadding
-    $indexPadding = $Podcasts.Count.ToString().Length
-    $origBgColor = $host.UI.RawUI.BackgroundColor
-    $Podcasts | ForEach-Object {
-        if ( $Podcasts.indexof($_) % 2) { # Alternating for visual cue.
-            $host.UI.RawUI.BackgroundColor = 'DarkYellow'
-            $([string]$Podcasts.indexof($_)).padleft($indexPadding) +
-            " " + $([string]$_.title).PadLeft($titlePadding) +
-            " " + $([string]$_.author).PadLeft($authorPadding) +
-            " " + $([string]$_.url).PadLeft($urlPadding)
-        }
-        else {
-            $host.UI.RawUI.BackgroundColor = $origBgColor
-            $([string]$Podcasts.indexof($_)).padleft($indexPadding) +
-            " " + $([string]$_.title).PadLeft($titlePadding) +
-            " " + $([string]$_.author).PadLeft($authorPadding) +
-            " " + $([string]$_.url).PadLeft($urlPadding)
-        }
-    }
-    $host.UI.RawUI.BackgroundColor = $origBgColor
+function write-host-choices() {
+    Write-Host " s : search and add a new podcast"
+    Write-Host " l : list all podcasts"
+    Write-Host " r : remove a podcast"
+    Write-Host " q : quit"
 }
 
 $isActive = $true
@@ -171,6 +138,7 @@ while ($isActive) {
                     $isRemoving = $false
                 }
             }
+            write-host-choices
         }
         "q" {
             $isActive = $false

@@ -8,6 +8,7 @@ try {
     if ( !$(Test-Path -Path $settings_file -PathType Leaf) ) {
         $settings = @{
             "file" = @{
+                "self"   = $settings_file
                 "search" = "search.json"
                 "feeds"  = "feeds.json"
             }
