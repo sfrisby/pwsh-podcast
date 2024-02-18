@@ -3,7 +3,7 @@ $settings = $(get-content -Path $settings_file -Raw | ConvertFrom-Json)
 
 . .\utils.ps1
 
-function Get-PodcastEpisodes {
+function Get-Episodes {
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline)]
         [string]$URI
@@ -28,8 +28,7 @@ function Get-PodcastEpisodes {
     }
     $table
 }
-
-function SanitizeString() {
+function Approve-String() {
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline)]
         [string]$ToSanitize
@@ -42,21 +41,6 @@ function SanitizeString() {
         }
     }
     $ToSanitize
-}
-
-function Get-PodcastEpisode {
-    param (
-        [Parameter(Mandatory = $true, ValueFromPipeline)]
-        [string]$URI,
-        [ValidateScript({ 
-                $(Test-Path -Path $_ -PathType Leaf -IsValid) -and 
-                $($_.Name -notmatch [System.IO.Path]::GetInvalidFileNameChars()) 
-            })]
-        [string]$Path = [System.IO.Path]::Combine(
-            [System.IO.Path]::GetTempPath(), 
-            [System.IO.Path]::GetTempFileName())
-    )
-    Invoke-WebRequest -Uri $URI -OutFile $Path
 }
 
 function Format-Episodes {
@@ -86,86 +70,108 @@ function Format-Episodes {
     $Episodes
 }
 
-# Wrtining console output for episodes, specifically: index | episode-title | publication date
-function Write-Host-Episodes() {
+function Update-Episodes() {
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable] $Podcast
+    )
+    $episodesLocal = @()
+    $episodesLatest = @()
+    $jsonDepth = 10
+    $podcastEpisodesTitle = Approve-String -ToSanitize $Podcast.title
+    $podcastEpisodesFile = "$podcastEpisodesTitle.json"
+    if ( !( Test-Path -Path "$podcastEpisodesFile" -PathType Leaf ) ) {
+        Write-Host "Selected '$($Podcast.title)'. Performing first time episode gathering ..."
+        $(Format-Episodes -Episodes $(Get-Episodes -URI $Podcast.url)) | ConvertTo-Json -depth $jsonDepth | Out-File -FilePath $podcastEpisodesFile
+        $episodesLocal = [array]$(Get-Content -Path $podcastEpisodesFile | ConvertFrom-Json -AsHashtable)
+    }
+    else {
+        $episodesLocal = [array]$(Get-Content -Path $podcastEpisodesFile | ConvertFrom-Json -AsHashtable)
+        $writeTimeDiff = $(Get-Date) - ($(Get-ChildItem -Path $podcastEpisodesFile | Select-Object -Property LastWriteTime).LastWriteTime)
+        # if ( $writeTimeDiff.Seconds -gt 2 ) {
+        if ( $writeTimeDiff.Days -gt 1 ) {
+            $timeDiff = "[$($writeTimeDiff.Days):$($writeTimeDiff.Hours):$($writeTimeDiff.Minutes):$($writeTimeDiff.Seconds)]"
+            Write-Host "Episodes for '$podcastEpisodesTitle' were last updated: $timeDiff [days:hours:minutes:seconds]"
+            write-host "Checking for new '$($Podcast.title)' episodes ..."
+            $episodesLatest = Format-Episodes -Episodes ($(Get-Episodes -URI $Podcast.url))
+        }
+    }
+    # Display episodes. Save latest episodes as the new baseline. Display newest episodes.
+    if ( $episodesLatest.Count -gt $episodesLocal.Count ) {
+        $episodesLatest | ConvertTo-Json -depth $jsonDepth | Out-File -FilePath $podcastEpisodesFile 
+        $newest = @()
+        foreach ($e in $episodesLatest) {
+            if ( $episodesLocal.title -notcontains $e.title ) {
+                $newest += @($e)
+            }
+        }
+        if ( !($newest.Count -eq 0) ) {
+            return $newest
+        }
+        else {
+            throw "New episodes were expected but none were found."
+        }
+        return $episodesLatest
+    }
+    else {
+        return $episodesLocal
+    }
+}
+
+# Writing console output for episodes, specifically: index | episode-title | publication date
+function Write-Episodes() {
     param(
         # Array containing hashtables of episode entries.
         [Parameter(Mandatory = $true)]
         [array] $Episodes,
         # Additional spacing for episode information.
-        [int] $episodeExtraPadding = 3,
-        # Provide the number of episodes to list;. Default is 10. Providing 0 will show all episodes.
-        [int] $episodesListedAmount = 10
+        [int] $Padding = 3,
+        # Provide the amount of episodes to list;. Default is 10. Providing 0 will show all episodes.
+        [int] $Amount = 10
     )
-    if ($episodesListedAmount -eq 0) {
-        $episodesListedAmount = $Episodes.Count
+    if ($Amount -eq 0) {
+        $Amount = $Episodes.Count
     }
-    $eTitlePadding = $($($Episodes.title | Select-Object -First $episodesListedAmount) | ForEach-Object { $_.length } | Measure-Object -Maximum).Maximum + $episodeExtraPadding
-    $ePubDatePadding = $($($Episodes.pubDate | Select-Object -First $episodesListedAmount) | ForEach-Object { $_.length } | Measure-Object -Maximum).Maximum + $episodeExtraPadding
+    $eTitlePadding = $($($Episodes.title | Select-Object -First $Amount) | ForEach-Object { $_.length } | Measure-Object -Maximum).Maximum + $Padding
+    $ePubDatePadding = $($($Episodes.pubDate | Select-Object -First $Amount) | ForEach-Object { $_.length } | Measure-Object -Maximum).Maximum + $Padding
     $indexPadding = $Episodes.Count.ToString().Length
-    $Episodes | Select-Object -First $episodesListedAmount | ForEach-Object {
+    # foreach ($e in ($Episodes | Select-Object -First $Amount)) {
+    #     $($Episodes.indexof($e)).tostring().padleft($indexPadding) + 
+    #     " | " + $($e.title).padleft($eTitlePadding) +
+    #     " | " + $($e.pubDate.Values).padleft($ePubDatePadding) | Out-Host
+    # }
+    $Episodes | Select-Object -First $Amount | ForEach-Object {
         $($Episodes.indexof($_)).tostring().padleft($indexPadding) + 
         " | " + $($_.title).padleft($eTitlePadding) +
-        " | " + $($_.pubDate.Values).padleft($ePubDatePadding)
+        " | " + $($_.pubDate.Values).padleft($ePubDatePadding) | Out-Host
     }
 }
+function Find-Episode() {
+    param (
+        [Parameter(Mandatory = $true, ValueFromPipeline)]
+        [string]$URI,
+        [ValidateScript({ 
+                $(Test-Path -Path $_ -PathType Leaf -IsValid) -and 
+                $($_.Name -notmatch [System.IO.Path]::GetInvalidFileNameChars()) 
+            })]
+        [string]$Path = [System.IO.Path]::Combine(
+            [System.IO.Path]::GetTempPath(), 
+            [System.IO.Path]::GetTempFileName())
+    )
+    Invoke-WebRequest -Uri $URI -OutFile $Path
+}
 
-
+# Display podcasts from feed file and let user choose.
 $feeds = [array]$(Get-Content -Path $settings.file.feeds -Raw | ConvertFrom-Json -AsHashtable)
 displayPodcastsFeeds -Podcasts $feeds
-
 $choice = Read-Host "Select # (above) of the podcast to listen to"
 $podcast = $feeds[[int]$choice]
-$podcastEpisodesTitle = SanitizeString -ToSanitize $podcast.title
-$podcastEpisodesFile = "$podcastEpisodesTitle.json"
 
-$episodesLocal = @()
-$episodesLatest = @()
-$jsonDepth = 10
-
-if ( !( Test-Path -Path "$podcastEpisodesFile" -PathType Leaf ) ) {
-    Write-Host "Selected '$($podcast.title)'. Performing first time episode gathering ..."
-    $(Format-Episodes -Episodes $(Get-PodcastEpisodes -URI $podcast.url)) | ConvertTo-Json -depth $jsonDepth | Out-File -FilePath $podcastEpisodesFile
-    $episodesLocal = [array]$(Get-Content -Path $podcastEpisodesFile | ConvertFrom-Json -AsHashtable)
-}
-else {
-    $episodesLocal = [array]$(Get-Content -Path $podcastEpisodesFile | ConvertFrom-Json -AsHashtable)
-    $sWriteTimeDifference = $(Get-Date) - ($(Get-ChildItem -Path $podcastEpisodesFile | Select-Object -Property LastWriteTime).LastWriteTime)
-    # if ( $sWriteTimeDifference.Seconds -gt 2 ) {
-    if ( $sWriteTimeDifference.Days -gt 1 ) {
-        Write-Host "Episodes for '$podcastEpisodesTitle' were last updated: [days:hours:minutes:seconds]"
-        Write-Host "$($sWriteTimeDifference.Days) days, "
-        write-host "$($sWriteTimeDifference.Hours) hours, "
-        write-host "$($sWriteTimeDifference.Minutes) minutes, "
-        write-host "$($sWriteTimeDifference.Seconds) seconds"
-        write-host "Checking for new '$($podcast.title)' episodes ..."
-        $episodesLatest = Format-Episodes -Episodes ($(Get-PodcastEpisodes -URI $podcast.url))
-        # $(Format-Episodes -Episodes $(Get-PodcastEpisodes -URI $podcast.url)) 
-    }
-}
-
-if ( $episodesLatest.Count -gt $episodesLocal.Count ) {
-    # Save latest episodes as the new baseline; display newest episodes; error if none were found.
-    $episodesLatest | ConvertTo-Json -depth $jsonDepth | Out-File -FilePath $podcastEpisodesFile 
-    $newest = @()
-    foreach ($e in $episodesLatest) {
-        if ( $episodesLocal.title -notcontains $e.title ) {
-            $newest += @($e)
-        }
-    }
-    if ( !($newest.Count -eq 0) ) {
-        write-host-episodes -episodes $newest
-    }
-    else {
-        throw "New episodes were expected but none were found."
-    }
-}
-else {
-    # Display the episodes.
-    write-host-episodes -episodes $episodesLocal
-}
-
-$choice = Read-Host -prompt "Select episode by number"
+# Display the episodes and let user choose.
+$episodes = Update-Episodes -Podcast $podcast
+Write-Episodes -Episodes $episodes
+$choice = Read-Host -prompt "Select episode by # (above)"
+$episode = @()
 try {
     $episode = $episodes[[int]::Parse($choice)]
     Write-Host "Episode selected was: '$($episode.title)'."
@@ -174,8 +180,9 @@ catch [System.FormatException] {
     throw "A number was not provided. Unable to proceede."
 }
 
-$title = SanitizeString -ToSanitize $episode.title
+# Download the episode if found.
+$title = Approve-String -ToSanitize $episode.title
 $file = join-path (Get-location) "${title}.mp3"
 $url = $episode.enclosure.url
-Get-PodcastEpisode -URI $url -Path $file
+Find-Episode -URI $url -Path $file
 
