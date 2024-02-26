@@ -4,12 +4,12 @@ function Write-Host-Welcome() {
         [Parameter(Mandatory = $true)]
         [string] $Message,
         # Delimiter to encase around message.
-        [ValidateScript( {$_.length -eq 1} )]
+        [ValidateScript( { $_.length -eq 1 } )]
         [string] $delimiter = ' '
     )
-    $ruler = $delimiter*[Console]::BufferWidth
-    $split = ($ruler.Length - $Message.Length)/2
-    $spacer = $delimiter*$split
+    $ruler = $delimiter * [Console]::BufferWidth
+    $split = ($ruler.Length - $Message.Length) / 2
+    $spacer = $delimiter * $split
     $title = $($spacer + $Message + $spacer)
     if ($title.length -gt [Console]::BufferWidth) {
         $title = $title[0..([Console]::BufferWidth - 1)] | join-string
@@ -166,9 +166,10 @@ function displayPodcastsFeeds() {
     $indexPadding = $Podcasts.Count.ToString().Length
     $origBgColor = $host.UI.RawUI.ForegroundColor
     $r = "  "
-    $rw = "_"*$($r.Length)
+    $rw = "_" * $($r.Length)
     $Podcasts | ForEach-Object {
-        if ( $Podcasts.indexof($_) % 2) { # Alternating for visual cue.
+        if ( $Podcasts.indexof($_) % 2) {
+            # Alternating for visual cue.
             $host.UI.RawUI.ForegroundColor = 'DarkGreen'
             $([string]$Podcasts.indexof($_)).padleft($indexPadding) +
             " " + $([string]$_.title).PadLeft($titlePadding) +
@@ -178,9 +179,9 @@ function displayPodcastsFeeds() {
         else {
             $host.UI.RawUI.ForegroundColor = $origBgColor
             $([string]$Podcasts.indexof($_)).padleft($indexPadding) +
-            " " + $([string]$_.title).PadLeft($titlePadding).Replace($r,$rw) +
-            " " + $([string]$_.author).PadLeft($authorPadding).Replace($r,$rw) +
-            " " + $([string]$_.url).PadLeft($urlPadding).Replace($r,$rw)
+            " " + $([string]$_.title).PadLeft($titlePadding).Replace($r, $rw) +
+            " " + $([string]$_.author).PadLeft($authorPadding).Replace($r, $rw) +
+            " " + $([string]$_.url).PadLeft($urlPadding).Replace($r, $rw)
         }
     }
     $host.UI.RawUI.ForegroundColor = $origBgColor
@@ -263,15 +264,11 @@ function Update-Episodes() {
     $jsonDepth = 10
     $podcastEpisodesTitle = Approve-String -ToSanitize $Podcast.title
     $podcastEpisodesFile = "$podcastEpisodesTitle.json"
+    # Check if episodes file exists.
     if ( ( Test-Path -Path "$podcastEpisodesFile" -PathType Leaf ) ) {
-        # File already exists
-        $episodesLocal = [array]$(Get-Content -Path $podcastEpisodesFile | ConvertFrom-Json -AsHashtable)
-        if ("null" -eq $episodesLocal) {
-            throw "File provided was 'null'."
-        }
+        # Check for new episodes (longer than a day).
         $writeTimeDiff = $(Get-Date) - ($(Get-ChildItem -Path $podcastEpisodesFile | Select-Object -Property LastWriteTime).LastWriteTime)
-        # Check for possible updates.
-        if ( $writeTimeDiff.TotalHours -ge 6 ) {
+        if ( $writeTimeDiff.Day -ge 1 ) {
             $timeDiff = "[$($writeTimeDiff.Days):$($writeTimeDiff.Hours):$($writeTimeDiff.Minutes):$($writeTimeDiff.Seconds)]"
             Write-Host "Episodes for '$podcastEpisodesTitle' were last updated: $timeDiff [days:hours:minutes:seconds]"
             write-host "Checking for new '$($Podcast.title)' episodes ..."
@@ -280,6 +277,11 @@ function Update-Episodes() {
                 # Save the latest episodes as the new baseline.
                 $($episodesLatest | ConvertTo-Json -depth $jsonDepth | Out-File -FilePath $podcastEpisodesFile)
                 return $episodesLatest
+            }
+        } else {
+            $episodesLocal = [array]$(Get-Content -Path $podcastEpisodesFile | ConvertFrom-Json -AsHashtable)
+            if ("null" -eq $episodesLocal) {
+                throw "File provided contained 'null'. Delete '$podcastEpisodesFile' and try again."
             }
         }
     }

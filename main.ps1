@@ -3,7 +3,8 @@ $settings = $(get-content -Path $settings_file -Raw | ConvertFrom-Json)
 
 . .\utils.ps1
 
-$toStream = $true
+# $toStream = $true
+$toStream = $false
 
 # Display podcasts from feed file and let user choose.
 $feeds = [array]$(Get-Content -Path $settings.file.feeds -Raw | ConvertFrom-Json -AsHashtable)

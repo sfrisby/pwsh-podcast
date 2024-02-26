@@ -32,7 +32,6 @@ $podcasts_Label.Location = New-Object System.Drawing.Point($podcasts_lable_x, $p
 $podcasts_Label.AutoSize = $true
 $main_form.Controls.Add($podcasts_Label)
 
-$script:jobName = "MyPodcastPlayer_v0.0.0.a"
 $script:podcasts = [array]$(Get-Content -Path $settings.file.feeds -Raw | ConvertFrom-Json -AsHashtable);
 $script:episodes = @()
 
@@ -84,7 +83,6 @@ $episodes_ListView.Width = $episodes_listview_width
 $episodes_ListView.Height = $episodes_listview_height
 $episodes_ListView.HeaderStyle = 'Nonclickable'
 $episodes_ListView.Location = New-Object System.Drawing.Point($episodes_listbox_x, $episodes_listbox_y)
-$episodes_ListView.HeaderStyle = 'Nonclickable'
 $episodes_ListView.MultiSelect = $false
 $episodes_ListView.FullRowSelect = $true
 $episodes_ListView.Enabled = $false
