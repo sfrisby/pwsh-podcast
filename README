@@ -2,9 +2,9 @@
 
 This project contains simple boilerplate for maintaining and playing podcasts through PowerShell. 
 
-Both a console and Windows Forms GUI are provided. However, setup is performed via the console.
+Both a console and Windows Forms GUI are provided. However, setup is **only** performed via the console.
 
-VLC is used for playing media files. Currently, it expects VLC to be located at the 'default' install location, i.e: 
+VLC (Windows 64 bit version) is used for playing media files. It expects VLC to be located at the 'default' install location, i.e: 
 > C:\Program Files\VideoLAN\VLC\vlc.exe.
 
 ## Getting Started

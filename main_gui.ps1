@@ -22,6 +22,12 @@ $script:screenHeight = $screen[0].Bounds.Size.Height
 $screenHeight50p = [int]($script:screenHeight / 2)
 $screenWidth50p = [int]($script:screenWidth / 2)
 
+# https://stackoverflow.com/questions/72988434/how-to-make-winform-use-the-system-dark-mode-theme
+# int trueValue = 0x01, falseValue = 0x00;
+# SetWindowTheme(this.Handle, "DarkMode_Explorer", null);
+# DwmSetWindowAttribute(this.Handle, DwmWindowAttribute.DWMWA_USE_IMMERSIVE_DARK_MODE, $true, Marshal.SizeOf(typeof(int)));
+# DwmSetWindowAttribute(this.Handle, DwmWindowAttribute.DWMWA_MICA_EFFECT, $true, Marshal.SizeOf(typeof(int)));
+
 $form = New-Object System.Windows.Forms.Form
 $form.FormBorderStyle = 'None' # Will prevent minimize and close from appearing; Must override or use alt+F4 to close.
 $form.Size = New-Object System.Drawing.Size($screenWidth50p, $screenHeight50p)
@@ -99,9 +105,10 @@ $bColor = "#323232"
 $fColor = "#bebebe"
 
 $podcastsListBox = New-Object System.Windows.Forms.ListBox
-$podcastsListBox.Dock = 'Fill' # Cut off the top of the list ...
+$podcastsListBox.Dock = 'Fill' # Covering episode refresh button
+$podcastsListBox.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left
 $podcastsListBox.Location = New-Object System.Drawing.Point(0, $menu.Size.Height)
-$podcastsListBox.Size = New-Object Drawing.Size @(250, ($form.Height - $menu.Size.Height))
+$podcastsListBox.Size = New-Object Drawing.Size @(315, ($form.Height - $menu.Size.Height - $episodeRefreshButton.Size.Height - 200))
 $podcastsListBox.BackColor = $bColor
 $podcastsListBox.ForeColor = $fColor
 $podcastsListBox.DrawMode = 'OwnerDrawVariable' # Requires handling MeasureItem and DrawItem.
@@ -159,21 +166,80 @@ $podcastsListBox.Add_DrawItem({
             }
         }
     })
+$script:episodesRefreshing = $false
 $podcastsListBox.Add_SelectedIndexChanged({
         param($s, $e)
-        Write-Host "Selected: $($s.Text)"
-        $episodesListView.Clear() # Removes all headers & items.
-        $podcast = $script:podcasts[$script:podcasts.title.IndexOf($s.Text)]
-        $script:episodes = Update-Episodes -Podcast $podcast
-        [void]$episodesListView.Columns.Add("Episode", 350)
-        [void]$episodesListView.Columns.Add("Date", 150)
-        Foreach ($episode in $script:episodes) {
-            $item = New-Object system.Windows.Forms.ListViewItem
-            $item.Text = $episode.title # Column 1
-            $item.SubItems.Add( ($episode.pubDate.Values | Join-String) ) # column 2
-            $episodesListView.Items.Add($item)
+        if ( !$script:episodesRefreshing ) {
+            $script:episodesRefreshing = $true
+            $episodesListView.Clear() # Removes all headers & items.
+            $podcast = $script:podcasts[$script:podcasts.title.IndexOf($s.Text)]
+            $script:episodes = Update-Episodes -Podcast $podcast
+            [void]$episodesListView.Columns.Add("Episode", 350)
+            [void]$episodesListView.Columns.Add("Date", 150)
+            Foreach ($episode in $script:episodes) {
+                $item = New-Object system.Windows.Forms.ListViewItem
+                $item.Text = $episode.title # Column 1
+                $item.SubItems.Add( ($episode.pubDate.Values | Join-String) ) # column 2
+                $episodesListView.Items.Add($item)
+            }
+            $script:episodesRefreshing = $false
+        }
+        else {
+            Write-Host "Please wait while episodes are being gathered."
         }
     })
+$episodeRefreshButton = New-Object System.Windows.Forms.Button
+$episodeRefreshButton.Dock = 'top'
+$episodeRefreshButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left
+$episodeRefreshButton.Text = " Refresh Episodes List "
+$episodeRefreshButton.FlatStyle = 'Flat'
+$episodeRefreshButton.FlatAppearance.BorderSize = 1
+$episodeRefreshButton.FlatAppearance.BorderColor = "#222222"
+$episodeRefreshButton.BackColor = [System.Drawing.Color]::MidnightBlue
+$episodeRefreshButton.ForeColor = $fColor
+$episodeRefreshButton.AutoSize = $true
+$episodeRefreshButton.Add_Click({
+        param($s, $e)
+        if ($null -ne $podcastsListBox.SelectedItem) {
+            if ( !$script:episodesRefreshing ) {
+                $script:episodesRefreshing = $true
+                # TODO the logic here is duplicated in update-episodes method and may be simplified.
+                $episodesListView.Clear() # Removes all headers & items.
+                $podcast = $script:podcasts[$script:podcasts.title.IndexOf($podcastsListBox.SelectedItem)]
+                write-host "Gathering all episodes for '$($podcast.title)', as of $(Get-Date) ..."
+                $podcastEpisodesTitle = Approve-String -ToSanitize $podcast.title
+                $podcastEpisodesFile = "$podcastEpisodesTitle.json"
+                $(Format-Episodes -Episodes $(Get-Episodes -URI $podcast.url)) | ConvertTo-Json -depth 10 | Out-File -FilePath $podcastEpisodesFile
+                $script:episodes = [array]$(Get-Content -Path $podcastEpisodesFile | ConvertFrom-Json -AsHashtable)
+                [void]$episodesListView.Columns.Add("Episode", 350)
+                [void]$episodesListView.Columns.Add("Date", 150)
+                Foreach ($episode in $script:episodes) {
+                    $item = New-Object system.Windows.Forms.ListViewItem
+                    $item.Text = $episode.title # Column 1
+                    $item.SubItems.Add( ($episode.pubDate.Values | Join-String) ) # column 2
+                    $episodesListView.Items.Add($item)
+                }
+                $script:episodesRefreshing = $false
+            }
+            else {
+                Write-Host "Please wait while episodes are being gathered."
+            }
+        }
+        else {
+            $b = [System.Windows.Forms.MessageBoxButtons]::OK
+            $i = [System.Windows.Forms.MessageBoxIcon]::Information
+            $m = "A podcast must first be selected in order to refresh its episodes."
+            $t = “Select a Podcast”
+            [System.Windows.Forms.MessageBox]::Show($m,$t,$b,$i)
+        }
+    })
+
+$podcastsGroup = new-object System.Windows.Forms.GroupBox
+$podcastsGroup.Dock = 'fill'
+$podcastsGroup.Text = "Podcasts"
+[void] $podcastsGroup.Controls.Add($podcastsListBox)
+[void] $podcastsGroup.Controls.Add($episodeRefreshButton)
+
 
 $episodesListView = New-Object System.Windows.Forms.ListView
 $episodesListView.Dock = 'Fill'
@@ -184,7 +250,6 @@ $episodesListView.HeaderStyle = 'Nonclickable'
 $episodesListView.View = 'Details'
 $episodesListView.FullRowSelect = $true
 $episodesListView.MultiSelect = $false
-
 $episodesListView.Add_SelectedIndexChanged({
         param($s, $e)
         $script:episode = $script:episodes[$script:episodes.title.indexof($s.SelectedItems.text)]
@@ -261,6 +326,27 @@ $episodeDownloadPlayButton.Add_Click({
         }
     })
 
+$episodeDownloadButton = New-Object System.Windows.Forms.Button
+$episodeDownloadButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
+$episodeDownloadButton.Text = " Download "
+$episodeDownloadButton.FlatStyle = 'Flat'
+$episodeDownloadButton.FlatAppearance.BorderSize = 1
+$episodeDownloadButton.FlatAppearance.BorderColor = "#222222"
+$episodeDownloadButton.BackColor = $bColor
+$episodeDownloadButton.ForeColor = $fColor
+$episodeDownloadButton.AutoSize = $true
+$episodeDownloadButton.Add_Click({
+        if ($script:episode.Count -ne 0) {
+            Write-Host "Requested to download and play '$($episodes_ListView.SelectedItems.Text)' ..."
+            $title = Approve-String -ToSanitize $script:episode.title
+            $file = join-path (Get-location) "${title}.mp3"
+            if ( !(Test-Path -PathType Leaf -Path $file) ) {
+                $url = $script:episode.enclosure.url
+                Find-Episode -URI $url -Path $file
+            }
+        }
+    })
+
 $playButtonsPanel = New-Object System.Windows.Forms.FlowLayoutPanel
 $playButtonsPanel.Margin = 0
 $playButtonsPanel.Padding = 0
@@ -268,6 +354,7 @@ $playButtonsPanel.Dock = 'Bottom'
 $playButtonsPanel.Size = New-Object Drawing.Size @(250, 37)
 [void] $playButtonsPanel.Controls.Add($episodePlayButton)
 [void] $playButtonsPanel.Controls.Add($episodeDownloadPlayButton)
+[void] $playButtonsPanel.Controls.Add($episodeDownloadButton)
 
 $split = New-Object System.Windows.Forms.SplitContainer
 $split.Location = New-Object System.Drawing.Point(0, 0);
@@ -278,8 +365,7 @@ $split.SplitterWidth = 9
 
 $split.Panel1.BackColor = "#323232" # Behind the podcast list.
 $split.Panel1.Name = "Podcasts"
-
-$split.Panel1.Controls.Add($podcastsListBox)
+$split.Panel1.Controls.Add($podcastsGroup)
 $podcastsListBox.TabIndex = 1
 
 $splitEpisodes = New-Object System.Windows.Forms.SplitContainer

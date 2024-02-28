@@ -187,28 +187,30 @@ function displayPodcastsFeeds() {
     $host.UI.RawUI.ForegroundColor = $origBgColor
 }
 
-function Get-Episodes {
+function Get-All-Podcast-Episodes-XML() {
     param (
-        [Parameter(Mandatory = $true, ValueFromPipeline)]
-        [string]$URI
+        [Parameter(Mandatory = $true)]
+        [string] $URI
+    )
+    [XML] (Invoke-WebRequest -Uri $URI).Content
+}
+
+function Convert-XML-To-HashList() {
+    param (
+        [Parameter(Mandatory = $true)]
+        [XML] $Xml
     )
     $table = @()
-    $feed = Invoke-WebRequest -Uri $URI
-    $xml = [XML] $feed.Content
-    if ($null -ne $xml.rss.channel.author && $null -ne $xml.rss.channel.item) {
-        try {
-            # TODO resolve '#text' as a key for many items (via ConvertFrom-XML); duplicate key for identical entries as well.
-            $xml.rss.channel.item | ForEach-Object { # order preserved
-                $table += $($_ | ConvertFrom-XML)
-            }
-        }
-        catch {
-            Write-Host $_.ScriptStackTrace
-            throw "Failed to convert from XML."
+    try {
+        $Xml.rss.channel.item | ForEach-Object { # order preserved
+            #  ConvertFrom-XML leaves '#text' keys; duplicates also found.
+            #  Formating to eliminate '#text' keys and or duplicates.
+            $tmp = Format-Episode -Episode $($_ | ConvertFrom-XML)
+            $table += $($tmp)
         }
     }
-    else {
-        Throw "Unexpected XML format."
+    catch {
+        throw "Failed to convert XML to List. $($_.ErrorDetails), $($_.ScriptStackTrace)."
     }
     $table
 }
@@ -227,70 +229,109 @@ function Approve-String() {
     $ToSanitize
 }
 
-function Format-Episodes {
+function Format-Episode() {
     param(
-        # Parameter help description
         [Parameter(Mandatory = $true)]
-        [array] $Episodes
+        [hashtable] $Episode
     )
-    # Duplicates coming from XML conversion, silly XML object nonsense.
-    # Attempting to elliminate title duplicates to prevent padding issues.
-    $Episodes | ForEach-Object {
-        if ($_.title.Count -eq 1 -and $_.title.Keys -notcontains '#text') {
-            # Desired and expected - just continue
-        }
-        elseif ($_.title.Keys -contains '#text' -and $_.title.Keys.Count -gt 1) {
-            $tmp = $_.title[0].'#text'
-            $_.title = $tmp
-        }
-        elseif ($_.title.Keys -contains '#text') {
-            $tmp = $_.title.'#text'
-            $_.title = $tmp
-        }
-        elseif ($_.title.Count -ne 1 -and $_.title.GetType() -ne [string]) {
-            throw "Unexpected episode title Key was found."
-        }
+    if ($Episode.title.Count -eq 1 -and $Episode.title.Keys -notcontains '#text') {
     }
-    $Episodes
+    elseif ($Episode.title.Keys -contains '#text' -and $Episode.title.Keys.Count -gt 1) {
+        $tmp = $Episode.title[0].'#text'
+        $Episode.title = $tmp
+    }
+    elseif ($Episode.title.Keys -contains '#text') {
+        $tmp = $Episode.title.'#text'
+        $Episode.title = $tmp
+    }
+    elseif ($Episode.title.Count -ne 1 -and $Episode.title.GetType() -ne [string]) {
+        throw "Unexpected episode title Key was found."
+    }
+    $Episode
 }
 
+function Get-Podcast-Episode-List() {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateScript({ Test-Path -Path $_ -PathType Leaf })]
+        [String] $File
+    )
+    [array] $(Get-Content -Path $File | ConvertFrom-Json -AsHashtable)
+}
+
+function Get-Last-Write-Time() {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateScript({ Test-Path -Path $_ -PathType Leaf })]
+        [String] $File
+    )
+    $(Get-ChildItem -Path $File | Select-Object -Property LastWriteTime).LastWriteTime
+}
+
+function Write-Episodes-To-Json() {
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable] $Episodes,
+        [Parameter(Mandatory = $true)]
+        [String] $File,
+        [Parameter(Mandatory = $false)]
+        [int] $Depth = 10
+    )
+    $Episodes | ConvertTo-Json -depth $Depth | Out-File -Force -FilePath $File
+}
+
+<#
+.SYNOPSIS
+    Generate or update a podcast episode file.
+.DESCRIPTION
+    A JSON file is used to create and store episode lists. 
+.NOTES
+    Episodes are automatically updated if the last write time for the file has been
+    longer than 12 hours.
+.EXAMPLE
+    Update-Episodes -Podcast $podcast
+    Generates or updates an episode list for the given $podcast.
+
+    Update-Episodes -Podcast $podcast -Force
+    Forces search for episodes and updated for the given $podcast even if the last write
+    time was less than 12 hours.
+#>
 function Update-Episodes() {
     param(
         [Parameter(Mandatory = $true)]
-        [hashtable] $Podcast
+        [hashtable] $Podcast,
+        [Parameter]
+        [switch] $Force
     )
     $episodesLocal = @()
     $episodesLatest = @()
-    $jsonDepth = 10
-    $podcastEpisodesTitle = Approve-String -ToSanitize $Podcast.title
-    $podcastEpisodesFile = "$podcastEpisodesTitle.json"
+    $hoursToCheckAgain = 12
+    $podcastTitle = Approve-String -ToSanitize $Podcast.title
+    $episodesFile = "$podcastTitle.json"
     # Check if episodes file exists.
-    if ( ( Test-Path -Path "$podcastEpisodesFile" -PathType Leaf ) ) {
-        # Check for new episodes (longer than a day).
-        $writeTimeDiff = $(Get-Date) - ($(Get-ChildItem -Path $podcastEpisodesFile | Select-Object -Property LastWriteTime).LastWriteTime)
-        if ( $writeTimeDiff.Day -ge 1 ) {
-            $timeDiff = "[$($writeTimeDiff.Days):$($writeTimeDiff.Hours):$($writeTimeDiff.Minutes):$($writeTimeDiff.Seconds)]"
-            Write-Host "Episodes for '$podcastEpisodesTitle' were last updated: $timeDiff [days:hours:minutes:seconds]"
-            write-host "Checking for new '$($Podcast.title)' episodes ..."
-            $episodesLatest = Format-Episodes -Episodes ($(Get-Episodes -URI $Podcast.url))
+    if ( ( Test-Path -Path "$episodesFile" -PathType Leaf ) ) {
+        $episodesLocal = Get-Podcast-Episode-List -File $episodesFile
+        if ("null" -eq $episodesLocal) {
+            throw "File provided contained 'null'. Delete '$episodesFile' and try again."
+        }
+        # Check if last updated greater than last checked.
+        $lastWriteTimeDifference = $(Get-Date) - $(Get-Last-Write-Time -File $episodesFile)
+        $hoursSinceLastWritten = $lastWriteTimeDifference.Hours
+        if ( $hoursSinceLastWritten -ge $hoursToCheckAgain -or $Force ) {
+            write-host "Checking '$($Podcast.title)' for new episodes ..."
+            $episodesLatest = Convert-XML-To-HashList -Xml $(Get-All-Podcast-Episodes-XML -URI $Podcast.url)
             if ( $episodesLatest[0].title -ne $episodesLocal[0].title ) {
                 # Save the latest episodes as the new baseline.
-                $($episodesLatest | ConvertTo-Json -depth $jsonDepth | Out-File -FilePath $podcastEpisodesFile)
+                Write-Episodes-To-Json $episodesLatest -File $episodesFile
                 return $episodesLatest
-            }
-        } else {
-            $episodesLocal = [array]$(Get-Content -Path $podcastEpisodesFile | ConvertFrom-Json -AsHashtable)
-            if ("null" -eq $episodesLocal) {
-                throw "File provided contained 'null'. Delete '$podcastEpisodesFile' and try again."
             }
         }
     }
     else {
         Write-Host "Selected '$($Podcast.title)'. Performing first time episode gathering ..."
-        $(Format-Episodes -Episodes $(Get-Episodes -URI $Podcast.url)) | ConvertTo-Json -depth $jsonDepth | Out-File -FilePath $podcastEpisodesFile
-        $episodesLocal = [array]$(Get-Content -Path $podcastEpisodesFile | ConvertFrom-Json -AsHashtable)
+        Write-Episodes-To-Json -Episodes $(Convert-XML-To-HashList -Xml $(Get-All-Podcast-Episodes-XML -URI $Podcast.url)) -File $episodesFile
     }
-    return $episodesLocal
+    $(Get-Podcast-Episode-List -File $episodesFile)
 }
 
 # Writing console output for episodes, specifically: index | episode-title | publication date
