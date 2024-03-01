@@ -4,7 +4,10 @@
 #  * https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.combobox.flatstyle?view=windowsdesktop-8.0#system-windows-forms-combobox-flatstyle
 #  * https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.combobox.drawitem?view=windowsdesktop-8.0#system-windows-forms-combobox-drawitem
 
+# https://stackoverflow.com/questions/32014711/how-do-you-call-windows-explorer-with-a-file-selected-from-powershell
+
 Add-Type -assembly System.Windows.Forms
+# [void] [System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms")
 
 $settings_file = 'conf.json'
 $settings = $(get-content -Path $settings_file -Raw | ConvertFrom-Json)
@@ -19,18 +22,14 @@ $script:episode = @{}
 $screen = [System.Windows.Forms.Screen]::AllScreens
 $script:screenWidth = $screen[0].Bounds.Size.Width  
 $script:screenHeight = $screen[0].Bounds.Size.Height
-$screenHeight50p = [int]($script:screenHeight / 2)
+$screenHeight25p = [int]($script:screenHeight / 4)
+$screenHeight50p = [int]($screenHeight25p + $screenHeight25p)
+$screenHeight75p = [int]($screenHeight25p + $screenHeight50p)
 $screenWidth50p = [int]($script:screenWidth / 2)
-
-# https://stackoverflow.com/questions/72988434/how-to-make-winform-use-the-system-dark-mode-theme
-# int trueValue = 0x01, falseValue = 0x00;
-# SetWindowTheme(this.Handle, "DarkMode_Explorer", null);
-# DwmSetWindowAttribute(this.Handle, DwmWindowAttribute.DWMWA_USE_IMMERSIVE_DARK_MODE, $true, Marshal.SizeOf(typeof(int)));
-# DwmSetWindowAttribute(this.Handle, DwmWindowAttribute.DWMWA_MICA_EFFECT, $true, Marshal.SizeOf(typeof(int)));
 
 $form = New-Object System.Windows.Forms.Form
 $form.FormBorderStyle = 'None' # Will prevent minimize and close from appearing; Must override or use alt+F4 to close.
-$form.Size = New-Object System.Drawing.Size($screenWidth50p, $screenHeight50p)
+$form.Size = New-Object System.Drawing.Size($screenWidth50p, $screenHeight75p)
 $form.BackColor = "#232323"
 $form.ForeColor = "#aeaeae"
 $form.Text = "Podcasts"
@@ -203,14 +202,13 @@ $episodeRefreshButton.Add_Click({
         if ($null -ne $podcastsListBox.SelectedItem) {
             if ( !$script:episodesRefreshing ) {
                 $script:episodesRefreshing = $true
-                # TODO the logic here is duplicated in update-episodes method and may be simplified.
                 $episodesListView.Clear() # Removes all headers & items.
                 $podcast = $script:podcasts[$script:podcasts.title.IndexOf($podcastsListBox.SelectedItem)]
                 write-host "Gathering all episodes for '$($podcast.title)', as of $(Get-Date) ..."
                 $podcastEpisodesTitle = Approve-String -ToSanitize $podcast.title
                 $podcastEpisodesFile = "$podcastEpisodesTitle.json"
-                $(Format-Episodes -Episodes $(Get-Episodes -URI $podcast.url)) | ConvertTo-Json -depth 10 | Out-File -FilePath $podcastEpisodesFile
-                $script:episodes = [array]$(Get-Content -Path $podcastEpisodesFile | ConvertFrom-Json -AsHashtable)
+                Write-Episodes-To-Json -Episodes $( Convert-XML-To-HashList -Xml $(Get-All-Podcast-Episodes-XML -URI $podcast.url) ) -File $podcastEpisodesFile
+                $script:episodes = Get-Podcast-Episode-List -File $podcastEpisodesFile
                 [void]$episodesListView.Columns.Add("Episode", 350)
                 [void]$episodesListView.Columns.Add("Date", 150)
                 Foreach ($episode in $script:episodes) {
@@ -230,7 +228,7 @@ $episodeRefreshButton.Add_Click({
             $i = [System.Windows.Forms.MessageBoxIcon]::Information
             $m = "A podcast must first be selected in order to refresh its episodes."
             $t = “Select a Podcast”
-            [System.Windows.Forms.MessageBox]::Show($m,$t,$b,$i)
+            [System.Windows.Forms.MessageBox]::Show($m, $t, $b, $i)
         }
     })
 
@@ -283,8 +281,9 @@ $episodePlayButton.BackColor = $bColor
 $episodePlayButton.ForeColor = $fColor
 $episodePlayButton.AutoSize = $true
 $episodePlayButton.Add_Click({
-        if ($script:episode.Count -ne 0) {
-            Write-Host "Requested to play '$($episodes_ListView.SelectedItems.Text)' ..."
+        param($s, $e)
+        if ($episodesListView.SelectedItems.Count -ne 0) {
+            Write-Host "Requested to stream '$($episodesListView.SelectedItems.Text)' ..."
             $url = $script:episode.enclosure.url
             if ( -1 -ne (get-process).ProcessName.indexof('vlc')) {
                 Stop-Process -Name 'vlc'
@@ -292,7 +291,7 @@ $episodePlayButton.Add_Click({
             # --qt-start-minimized `
             & "C:\Program Files\VideoLAN\VLC\vlc.exe" `
                 --play-and-exit `
-                --rate=1.5 `
+                --rate=$($playbackRateSlider.Value / $playbackRateSliderDenomintator) `
                 $url
         }
     })
@@ -307,10 +306,14 @@ $episodeDownloadPlayButton.BackColor = $bColor
 $episodeDownloadPlayButton.ForeColor = $fColor
 $episodeDownloadPlayButton.AutoSize = $true
 $episodeDownloadPlayButton.Add_Click({
-        if ($script:episode.Count -ne 0) {
-            Write-Host "Requested to download and play '$($episodes_ListView.SelectedItems.Text)' ..."
-            $title = Approve-String -ToSanitize $script:episode.title
+        param($s, $e)
+        if ($episodesListView.SelectedItems.Count -ne 0) {
+            Write-Host "Requested to download and play '$($episodesListView.SelectedItems.Text)' ..."
+            $title = Approve-String -ToSanitize $script:episode.title # TODO: title and file are repeated in three methods
             $file = join-path (Get-location) "${title}.mp3"
+            if ($file.Contains('Microsoft.PowerShell.Core\FileSystem::')) {
+                $file = $file.Replace('Microsoft.PowerShell.Core\FileSystem::','')
+            }
             if ( !(Test-Path -PathType Leaf -Path $file) ) {
                 $url = $script:episode.enclosure.url
                 Find-Episode -URI $url -Path $file
@@ -321,7 +324,7 @@ $episodeDownloadPlayButton.Add_Click({
             # --qt-start-minimized `
             & "C:\Program Files\VideoLAN\VLC\vlc.exe" `
                 --play-and-exit `
-                --rate=1.5 `
+                --rate=$($playbackRateSlider.Value / $playbackRateSliderDenomintator) `
                 $file
         }
     })
@@ -336,13 +339,44 @@ $episodeDownloadButton.BackColor = $bColor
 $episodeDownloadButton.ForeColor = $fColor
 $episodeDownloadButton.AutoSize = $true
 $episodeDownloadButton.Add_Click({
-        if ($script:episode.Count -ne 0) {
-            Write-Host "Requested to download and play '$($episodes_ListView.SelectedItems.Text)' ..."
+        param($s, $e)
+        if ($episodesListView.SelectedItems.Count -ne 0) {
+            Write-Host "Requested to download '$($episodesListView.SelectedItems.Text)' ..."
             $title = Approve-String -ToSanitize $script:episode.title
             $file = join-path (Get-location) "${title}.mp3"
             if ( !(Test-Path -PathType Leaf -Path $file) ) {
                 $url = $script:episode.enclosure.url
                 Find-Episode -URI $url -Path $file
+            }
+        }
+    })
+
+$episodeRevealInFileExplorerButton = New-Object System.Windows.Forms.Button
+$episodeRevealInFileExplorerButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
+$episodeRevealInFileExplorerButton.Text = " Reveal in File Explorer "
+$episodeRevealInFileExplorerButton.FlatStyle = 'Flat'
+$episodeRevealInFileExplorerButton.FlatAppearance.BorderSize = 1
+$episodeRevealInFileExplorerButton.FlatAppearance.BorderColor = "#222222"
+$episodeRevealInFileExplorerButton.BackColor = $bColor
+$episodeRevealInFileExplorerButton.ForeColor = $fColor
+$episodeRevealInFileExplorerButton.AutoSize = $true
+$episodeRevealInFileExplorerButton.Add_Click({
+        param($s, $e)
+        if ($episodesListView.SelectedItems.Count -ne 0) {
+            $file = join-path $(Get-location) $($(Approve-String -ToSanitize $script:episode.title) + ".mp3")
+            if ($file.Contains('Microsoft.PowerShell.Core\FileSystem::')) {
+                $file = $file.Replace('Microsoft.PowerShell.Core\FileSystem::','')
+            }
+            if ( Test-Path -PathType Leaf -Path $file ) {
+                Write-Host "Requested to reveal '$file' ..."
+                Start-Process explorer.exe -ArgumentList "/select, ""$file"""
+            }
+            else {
+                $b = [System.Windows.Forms.MessageBoxButtons]::OK
+                $i = [System.Windows.Forms.MessageBoxIcon]::Information
+                $m = "A local file for the episode was not found. Ensure it was downloaded and try again."
+                $t = “Episode not found”
+                [System.Windows.Forms.MessageBox]::Show($m, $t, $b, $i)
             }
         }
     })
@@ -355,6 +389,130 @@ $playButtonsPanel.Size = New-Object Drawing.Size @(250, 37)
 [void] $playButtonsPanel.Controls.Add($episodePlayButton)
 [void] $playButtonsPanel.Controls.Add($episodeDownloadPlayButton)
 [void] $playButtonsPanel.Controls.Add($episodeDownloadButton)
+[void] $playButtonsPanel.Controls.Add($episodeRevealInFileExplorerButton)
+
+
+$playbackRateFasterButton = New-Object System.Windows.Forms.Button
+$playbackRateFasterButton.Text = "+"
+$playbackRateFasterButton.FlatStyle = 'Flat'
+$playbackRateFasterButton.FlatAppearance.BorderSize = 0
+$playbackRateFasterButton.BackColor = "#3e3e3e"
+$playbackRateFasterButton.AutoSize = $true
+$playbackRateFasterButton.Margin = 0
+$playbackRateFasterButton.Padding = 0
+$playbackRateFasterButton.Width = 50
+$playbackRateFasterButton.TextAlign = 'MiddleCenter'
+$playbackRateFasterButton.Font = New-Object Drawing.Font("Arial", 16)
+$playbackRateFasterButton.Add_Click({
+    param($s, $e)
+    try {
+        $playbackRateSlider.Value += 25
+    }
+    catch {
+        $playbackRateSlider.Value = $playbackRateSliderMax
+    }
+    $playbackRateLabelValue.Text = "$( "{0:0.00}" -f ($playbackRateSlider.Value / $playbackRateSliderDenomintator))"
+})
+
+$playbackRateSlowerButton = New-Object System.Windows.Forms.Button
+$playbackRateSlowerButton.Text = "-"
+$playbackRateSlowerButton.FlatStyle = 'Flat'
+$playbackRateSlowerButton.FlatAppearance.BorderSize = 0
+$playbackRateSlowerButton.BackColor = "#3e3e3e"
+$playbackRateSlowerButton.AutoSize = $true
+$playbackRateSlowerButton.Margin = 0
+$playbackRateSlowerButton.Padding = 0
+$playbackRateSlowerButton.Width = 50
+$playbackRateSlowerButton.TextAlign = 'MiddleCenter'
+$playbackRateSlowerButton.Font = New-Object Drawing.Font("Arial", 16)
+$playbackRateSlowerButton.Add_Click({
+    param($s, $e)
+    try {
+        $playbackRateSlider.Value -= 25
+    }
+    catch {
+        $playbackRateSlider.Value = $playbackRateSliderMin
+    }
+    $playbackRateLabelValue.Text = "$( "{0:0.00}" -f ($playbackRateSlider.Value / $playbackRateSliderDenomintator))"
+})
+
+$playbackRateSliderDenomintator = 100
+$playbackRateSliderMin = 10
+$playbackRateSliderMax = 300
+$playbackRateSliderDefault = 125
+$playbackRateSliderTick = 5
+
+$playbackRateSlider = New-Object System.Windows.Forms.TrackBar
+$playbackRateSlider.SetRange($playbackRateSliderMin, $playbackRateSliderMax)
+$playbackRateSlider.TickFrequency = $playbackRateSliderTick
+$playbackRateSlider.Value = $playbackRateSliderDefault
+$playbackRateSlider.Margin = 0
+$playbackRateSlider.Padding = 0
+$playbackRateSlider.Width = ($sliderPanel.Width - $playbackRateLabel.Width - $playbackRateLabelValue.Width - $playbackRateFasterButton.Width - $playbackRateSlowerButton.Width - 15)
+# $playbackRateSlider.AutoSize = $true
+$playbackRateSlider.TickStyle = 'Both'
+$playbackRateSlider.Add_ValueChanged({
+        param($s, $e)
+        $playbackRateLabelValue.Text = "$(getPlaybackRateSliderValue)"
+    })
+# $playbackRateSlider.Anchor = ([System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left)
+
+$playbackRateLabel = New-Object System.Windows.Forms.Label
+$playbackRateLabel.Height = $playbackRateSlider.Height
+$playbackRateLabel.Text = "Playback Rate Multiplier"
+$playbackRateLabel.TextAlign = 'MiddleCenter'
+$playbackRateLabel.Width = 75
+$playbackRateLabel.Font = New-Object Drawing.Font("Arial", 8)
+
+$playbackRateLabelValue = New-Object System.Windows.Forms.TextBox
+$playbackRateLabelValue.Text = "$(getPlaybackRateSliderValue)"
+$playbackRateLabelValue.BackColor = "#111111"
+$playbackRateLabelValue.ForeColor = "#bebebe"
+$playbackRateLabelValue.BorderStyle = 'None'
+$playbackRateLabelValue.TextAlign = 'center'
+$playbackRateLabelValue.Multiline = $false
+$playbackRateLabelValue.Margin = New-Object Windows.Forms.Padding(0, $($playbackRateSlider.Height / 4), 0, 0) # Centering label
+$playbackRateLabelValue.Font = New-Object Drawing.Font("Arial", 14)
+$playbackRateLabelValue.Width = 50
+$playbackRateLabelValue.MaxLength = 4
+$playbackRateLabelValue.Add_KeyDown({
+        param($s, $e)
+        if ($e.KeyCode -eq 'Enter') {
+            try {
+                $v = [double]($s.Text)
+                if ($v -ge 3) {
+                    $playbackRateLabelValue.Text = "$( "{0:0.00}" -f ($playbackRateSliderMax / $playbackRateSliderDenomintator))"
+                    $playbackRateSlider.Value = $playbackRateSliderMax
+                } elseif ($v -le 0.5) {
+                    $playbackRateLabelValue.Text = "$( "{0:0.00}" -f ($playbackRateSliderMin / $playbackRateSliderDenomintator))"
+                    $playbackRateSlider.Value = $playbackRateSliderMin
+                } else {
+                    $playbackRateLabelValue.Text = "$( "{0:0.00}" -f $v )"
+                    $playbackRateSlider.Value = [double]( $v * $playbackRateSliderDenomintator )
+                }
+            }
+            catch {
+                $playbackRateLabelValue.Text = "$( "{0:0.00}" -f ($playbackRateSliderDefault / $playbackRateSliderDenomintator))"
+                $playbackRateSlider.Value = $playbackRateSliderDefault
+            }
+        }
+    })
+
+function getPlaybackRateSliderValue {
+    "{0:0.00}" -f $([double]( [double]$playbackRateSlider.Value / [double]$playbackRateSliderDenomintator ))
+}
+
+$sliderPanel = New-Object System.Windows.Forms.FlowLayoutPanel
+$sliderPanel.Margin = 0
+$sliderPanel.Padding = 0
+$sliderPanel.Dock = 'Bottom'
+$sliderPanel.BackColor = "#1d1d1d"
+$sliderPanel.Size = New-Object Drawing.Size @(250, $playbackRateSlider.Height)
+[void] $sliderPanel.Controls.Add($playbackRateLabel)
+[void] $sliderPanel.Controls.Add($playbackRateLabelValue)
+[void] $sliderPanel.Controls.Add($playbackRateSlider)
+[void] $sliderPanel.Controls.Add($playbackRateFasterButton)
+[void] $sliderPanel.Controls.Add($playbackRateSlowerButton)
 
 $split = New-Object System.Windows.Forms.SplitContainer
 $split.Location = New-Object System.Drawing.Point(0, 0);
@@ -383,6 +541,7 @@ $episodesListView.TabIndex = 3
 
 $splitEpisodes.Panel2.Controls.Add($episodeInfo)
 $splitEpisodes.Panel2.Controls.Add($playButtonsPanel)
+$splitEpisodes.Panel2.Controls.Add($sliderPanel)
 
 $splitEpisodes.Panel2.Name = "Episode Information"
 $episodeInfo.TabIndex = 4

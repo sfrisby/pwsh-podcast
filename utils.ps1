@@ -271,7 +271,7 @@ function Get-Last-Write-Time() {
 function Write-Episodes-To-Json() {
     param(
         [Parameter(Mandatory = $true)]
-        [hashtable] $Episodes,
+        [array] $Episodes,
         [Parameter(Mandatory = $true)]
         [String] $File,
         [Parameter(Mandatory = $false)]
