@@ -1,23 +1,34 @@
-# https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.listview.ownerdraw?view=windowsdesktop-8.0&redirectedfrom=MSDN#System_Windows_Forms_ListView_OwnerDraw
+<#
+.SYNOPSIS
+GUI script for podcasts. 
 
-# https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.combobox?view=windowsdesktop-8.0
-#  * https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.combobox.flatstyle?view=windowsdesktop-8.0#system-windows-forms-combobox-flatstyle
-#  * https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.combobox.drawitem?view=windowsdesktop-8.0#system-windows-forms-combobox-drawitem
+.DESCRIPTION
+Pulls feeds from 'feeds.json'. 
 
-# https://stackoverflow.com/questions/32014711/how-do-you-call-windows-explorer-with-a-file-selected-from-powershell
+Once a feed is selected, its respective episodes are saved and listed. 
+
+An episode may be played by selecting it and then clicking on the desired play button.
+
+The rate of playback may also be modified PRIOR to clicking on a play button.
+
+.NOTES
+Thanks given to the following:
+    https://stackoverflow.com/questions/32014711/how-do-you-call-windows-explorer-with-a-file-selected-from-powershell
+
+    https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.combobox?view=windowsdesktop-8.0
+        https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.combobox.flatstyle?view=windowsdesktop-8.0#system-windows-forms-combobox-flatstyle
+        https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.combobox.drawitem?view=windowsdesktop-8.0#system-windows-forms-combobox-drawitem
+
+    https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.listview.ownerdraw?view=windowsdesktop-8.0&redirectedfrom=MSDN#System_Windows_Forms_ListView_OwnerDraw
+#>
 
 Add-Type -assembly System.Windows.Forms
-# [void] [System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms")
 
-$settings_file = 'conf.json'
-$settings = $(get-content -Path $settings_file -Raw | ConvertFrom-Json)
+. '.\include.ps1'
 
-. .\utils.ps1
-
-$script:podcasts = [array]$(Get-Content -Path $settings.file.feeds -Raw | ConvertFrom-Json -AsHashtable);
+$script:podcasts = [array]$(Get-Content -Path $FEEDS_FILE -Raw | ConvertFrom-Json -AsHashtable);
 $script:episodes = @()
 $script:episode = @{}
-
 
 $screen = [System.Windows.Forms.Screen]::AllScreens
 $script:screenWidth = $screen[0].Bounds.Size.Width  
@@ -39,7 +50,6 @@ $titleLabel.Text = "Podcasts"
 $titleLabel.Font = New-Object Drawing.Font("Arial", 12, [System.Drawing.FontStyle]::Bold)
 $titleLabel.TextAlign = 'MiddleCenter'
 $titleLabel.ForeColor = "#cdcdcd"
-# $titleLabel.Anchor = ([System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left)
 $titleLabel.Anchor = [System.Windows.Forms.AnchorStyles]::Left
 $titleLabel.AutoSize = $true
 
@@ -178,7 +188,7 @@ $podcastsListBox.Add_SelectedIndexChanged({
             Foreach ($episode in $script:episodes) {
                 $item = New-Object system.Windows.Forms.ListViewItem
                 $item.Text = $episode.title # Column 1
-                $item.SubItems.Add( ($episode.pubDate.Values | Join-String) ) # column 2
+                $item.SubItems.Add($episode.pubDate) # column 2
                 $episodesListView.Items.Add($item)
             }
             $script:episodesRefreshing = $false
@@ -207,14 +217,14 @@ $episodeRefreshButton.Add_Click({
                 write-host "Gathering all episodes for '$($podcast.title)', as of $(Get-Date) ..."
                 $podcastEpisodesTitle = Approve-String -ToSanitize $podcast.title
                 $podcastEpisodesFile = "$podcastEpisodesTitle.json"
-                Write-Episodes-To-Json -Episodes $( Convert-XML-To-HashList -Xml $(Get-All-Podcast-Episodes-XML -URI $podcast.url) ) -File $podcastEpisodesFile
+                Write-Episodes-To-Json -Episodes $(ConvertFrom-PodcastWebRequestContent -Request $(Invoke-WebRequest -Uri $podcast.url)) -File $podcastEpisodesFile
                 $script:episodes = Get-Podcast-Episode-List -File $podcastEpisodesFile
                 [void]$episodesListView.Columns.Add("Episode", 350)
                 [void]$episodesListView.Columns.Add("Date", 150)
                 Foreach ($episode in $script:episodes) {
                     $item = New-Object system.Windows.Forms.ListViewItem
                     $item.Text = $episode.title # Column 1
-                    $item.SubItems.Add( ($episode.pubDate.Values | Join-String) ) # column 2
+                    $item.SubItems.Add($episode.pubDate) # column 2
                     $episodesListView.Items.Add($item)
                 }
                 $script:episodesRefreshing = $false
@@ -252,15 +262,26 @@ $episodesListView.Add_SelectedIndexChanged({
         param($s, $e)
         $script:episode = $script:episodes[$script:episodes.title.indexof($s.SelectedItems.text)]
         $episodeInfo.ResetText()
-        $episodeInfo.Text = "Title: $($episode.title)`n" + `
-            "Description: $($episode.description.'#text')`n" + `
-            "Author: $($episode.author.'#text')`n" + `
-            "Link: $($episode.enclosure.url)`n"
+        if ($script:episode.title) {
+            $episodeInfo.Text += "Title: $($script:episode.title)`n"
+        }
+        if ($script:episode.description) {
+            if ($script:episode.encoded) {
+                $episodeInfo.Text += "$($script:episode.encoded)`n"
+            } else {
+                $episodeInfo.Text += "Description: $($script:episode.description)`n"
+            }
+        }
+        if ($script:episode.author) {
+            $episodeInfo.Text += "Author: $($script:episode.author)`n"
+        }
+        if ($script:episode.enclosure.url) {
+            "Link: $($script:episode.enclosure.url)`n"
+        }
     })
 
 $episodeInfo = New-Object System.Windows.Forms.RichTextBox
 $episodeInfo.Dock = 'Fill'
-$episodeInfo.Text = ""
 $episodeInfo.Text = " `n" + `
     "   First, select a podcast (left) then select an episode from the generated list (above).`n" + `
     "   If podcasts aren't listed, run the setup.ps1 script followed by the create-update-feeds.ps1 script."
@@ -269,7 +290,6 @@ $episodeInfo.ReadOnly = $true
 $episodeInfo.BorderStyle = 'None'
 $episodeInfo.BackColor = $bColor
 $episodeInfo.ForeColor = $fColor
-# $episodeInfo.AutoSize = $true
 
 $episodePlayButton = New-Object System.Windows.Forms.Button
 $episodePlayButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left
@@ -312,11 +332,11 @@ $episodeDownloadPlayButton.Add_Click({
             $title = Approve-String -ToSanitize $script:episode.title # TODO: title and file are repeated in three methods
             $file = join-path (Get-location) "${title}.mp3"
             if ($file.Contains('Microsoft.PowerShell.Core\FileSystem::')) {
-                $file = $file.Replace('Microsoft.PowerShell.Core\FileSystem::','')
+                $file = $file.Replace('Microsoft.PowerShell.Core\FileSystem::', '')
             }
             if ( !(Test-Path -PathType Leaf -Path $file) ) {
                 $url = $script:episode.enclosure.url
-                Find-Episode -URI $url -Path $file
+                Get-Episode -URI $url -Path $file
             }
             if ( -1 -ne (get-process).ProcessName.indexof('vlc')) {
                 Stop-Process -Name 'vlc'
@@ -346,7 +366,7 @@ $episodeDownloadButton.Add_Click({
             $file = join-path (Get-location) "${title}.mp3"
             if ( !(Test-Path -PathType Leaf -Path $file) ) {
                 $url = $script:episode.enclosure.url
-                Find-Episode -URI $url -Path $file
+                Get-Episode -URI $url -Path $file
             }
         }
     })
@@ -365,7 +385,7 @@ $episodeRevealInFileExplorerButton.Add_Click({
         if ($episodesListView.SelectedItems.Count -ne 0) {
             $file = join-path $(Get-location) $($(Approve-String -ToSanitize $script:episode.title) + ".mp3")
             if ($file.Contains('Microsoft.PowerShell.Core\FileSystem::')) {
-                $file = $file.Replace('Microsoft.PowerShell.Core\FileSystem::','')
+                $file = $file.Replace('Microsoft.PowerShell.Core\FileSystem::', '')
             }
             if ( Test-Path -PathType Leaf -Path $file ) {
                 Write-Host "Requested to reveal '$file' ..."
@@ -404,15 +424,15 @@ $playbackRateFasterButton.Width = 50
 $playbackRateFasterButton.TextAlign = 'MiddleCenter'
 $playbackRateFasterButton.Font = New-Object Drawing.Font("Arial", 16)
 $playbackRateFasterButton.Add_Click({
-    param($s, $e)
-    try {
-        $playbackRateSlider.Value += 25
-    }
-    catch {
-        $playbackRateSlider.Value = $playbackRateSliderMax
-    }
-    $playbackRateLabelValue.Text = "$( "{0:0.00}" -f ($playbackRateSlider.Value / $playbackRateSliderDenomintator))"
-})
+        param($s, $e)
+        try {
+            $playbackRateSlider.Value += 25
+        }
+        catch {
+            $playbackRateSlider.Value = $playbackRateSliderMax
+        }
+        $playbackRateLabelValue.Text = "$( "{0:0.00}" -f ($playbackRateSlider.Value / $playbackRateSliderDenomintator))"
+    })
 
 $playbackRateSlowerButton = New-Object System.Windows.Forms.Button
 $playbackRateSlowerButton.Text = "-"
@@ -426,21 +446,31 @@ $playbackRateSlowerButton.Width = 50
 $playbackRateSlowerButton.TextAlign = 'MiddleCenter'
 $playbackRateSlowerButton.Font = New-Object Drawing.Font("Arial", 16)
 $playbackRateSlowerButton.Add_Click({
-    param($s, $e)
-    try {
-        $playbackRateSlider.Value -= 25
-    }
-    catch {
-        $playbackRateSlider.Value = $playbackRateSliderMin
-    }
-    $playbackRateLabelValue.Text = "$( "{0:0.00}" -f ($playbackRateSlider.Value / $playbackRateSliderDenomintator))"
-})
+        param($s, $e)
+        try {
+            $playbackRateSlider.Value -= 25
+        }
+        catch {
+            $playbackRateSlider.Value = $playbackRateSliderMin
+        }
+        $playbackRateLabelValue.Text = "$( "{0:0.00}" -f ($playbackRateSlider.Value / $playbackRateSliderDenomintator))"
+    })
 
+$playbackRateSliderDefault = 150 # 150/100 == 1.5 x
 $playbackRateSliderDenomintator = 100
-$playbackRateSliderMin = 10
+$playbackRateSliderMin = 50
 $playbackRateSliderMax = 300
-$playbackRateSliderDefault = 125
 $playbackRateSliderTick = 5
+function getPlaybackRateSliderValue {
+    "{0:0.00}" -f $([double]( [double]$playbackRateSlider.Value / [double]$playbackRateSliderDenomintator ))
+}
+
+$playbackRateLabel = New-Object System.Windows.Forms.Label
+$playbackRateLabel.Height = $playbackRateSlider.Height # !!! These definitions are placement dependent !!!
+$playbackRateLabel.Text = "Playback Rate Multiplier"
+$playbackRateLabel.TextAlign = 'MiddleCenter'
+$playbackRateLabel.Size = New-Object System.Drawing.Size(100, 45);
+$playbackRateLabel.Font = New-Object Drawing.Font("Arial", 8)
 
 $playbackRateSlider = New-Object System.Windows.Forms.TrackBar
 $playbackRateSlider.SetRange($playbackRateSliderMin, $playbackRateSliderMax)
@@ -448,21 +478,15 @@ $playbackRateSlider.TickFrequency = $playbackRateSliderTick
 $playbackRateSlider.Value = $playbackRateSliderDefault
 $playbackRateSlider.Margin = 0
 $playbackRateSlider.Padding = 0
-$playbackRateSlider.Width = ($sliderPanel.Width - $playbackRateLabel.Width - $playbackRateLabelValue.Width - $playbackRateFasterButton.Width - $playbackRateSlowerButton.Width - 15)
-# $playbackRateSlider.AutoSize = $true
+$playbackRateSlider.Width = 150
+# $playbackRateSlider.Width = ($sliderPanel.Width - $playbackRateLabel.Width - $playbackRateLabelValue.Width - $playbackRateFasterButton.Width - $playbackRateSlowerButton.Width - 30)
+$playbackRateSlider.AutoSize = $true
 $playbackRateSlider.TickStyle = 'Both'
 $playbackRateSlider.Add_ValueChanged({
         param($s, $e)
         $playbackRateLabelValue.Text = "$(getPlaybackRateSliderValue)"
     })
 # $playbackRateSlider.Anchor = ([System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left)
-
-$playbackRateLabel = New-Object System.Windows.Forms.Label
-$playbackRateLabel.Height = $playbackRateSlider.Height
-$playbackRateLabel.Text = "Playback Rate Multiplier"
-$playbackRateLabel.TextAlign = 'MiddleCenter'
-$playbackRateLabel.Width = 75
-$playbackRateLabel.Font = New-Object Drawing.Font("Arial", 8)
 
 $playbackRateLabelValue = New-Object System.Windows.Forms.TextBox
 $playbackRateLabelValue.Text = "$(getPlaybackRateSliderValue)"
@@ -480,13 +504,15 @@ $playbackRateLabelValue.Add_KeyDown({
         if ($e.KeyCode -eq 'Enter') {
             try {
                 $v = [double]($s.Text)
-                if ($v -ge 3) {
+                if ($v -ge [double]($playbackRateSliderMax / $playbackRateSliderDenomintator)) {
                     $playbackRateLabelValue.Text = "$( "{0:0.00}" -f ($playbackRateSliderMax / $playbackRateSliderDenomintator))"
                     $playbackRateSlider.Value = $playbackRateSliderMax
-                } elseif ($v -le 0.5) {
+                }
+                elseif ($v -le [double]($playbackRateSliderMin / $playbackRateSliderDenomintator)) {
                     $playbackRateLabelValue.Text = "$( "{0:0.00}" -f ($playbackRateSliderMin / $playbackRateSliderDenomintator))"
                     $playbackRateSlider.Value = $playbackRateSliderMin
-                } else {
+                }
+                else {
                     $playbackRateLabelValue.Text = "$( "{0:0.00}" -f $v )"
                     $playbackRateSlider.Value = [double]( $v * $playbackRateSliderDenomintator )
                 }
@@ -497,10 +523,6 @@ $playbackRateLabelValue.Add_KeyDown({
             }
         }
     })
-
-function getPlaybackRateSliderValue {
-    "{0:0.00}" -f $([double]( [double]$playbackRateSlider.Value / [double]$playbackRateSliderDenomintator ))
-}
 
 $sliderPanel = New-Object System.Windows.Forms.FlowLayoutPanel
 $sliderPanel.Margin = 0

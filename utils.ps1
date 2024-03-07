@@ -1,4 +1,7 @@
-function Write-Host-Welcome() {
+
+. ".\test\ConvertFrom-PodcastWebRequestContent\ConvertFrom-PodcastWebRequestContent.ps1"
+
+function Write-Host-Welcome {
     param(
         # Parameter help description.
         [Parameter(Mandatory = $true)]
@@ -19,95 +22,10 @@ function Write-Host-Welcome() {
     Write-Host $ruler
 }
 
-<# 
-https://github.com/Phil-Factor/PowerShell-Utility-Cmdlets/blob/main/ConvertFrom-XML/ConvertFrom-XML.ps1
-
-convert any simple XML document into an ordered hashtable. 
+<#
+.DESCRIPTION
+Retrived via Chrome developer tools.
 #>
-function ConvertFrom-XML {
-    [CmdletBinding()]
-    param
-    (
-        [Parameter(Mandatory = $true, ValueFromPipeline)]
-        [System.Xml.XmlNode]$node,
-        #we are working through the nodes
-
-        [string]$Prefix = '',
-        #do we indicate an attribute with a prefix?
-
-        $ShowDocElement = $false #Do we show the document element? 
-    )
-	
-    process {
-        #if option set, we skip the Document element
-        if ($node.DocumentElement -and !($ShowDocElement))
-        { $node = $node.DocumentElement }
-        $oHash = [ordered] @{ } # start with an ordered hashtable.
-        #The order of elements is always significant regardless of what they are
-        write-verbose "calling with $($node.LocalName)"
-        if ($null -ne $node.Attributes) {
-            #if there are elements
-            # record all the attributes first in the ordered hash
-            $node.Attributes | ForEach-Object {
-                $oHash.$($Prefix + $_.FirstChild.parentNode.LocalName) = $_.FirstChild.value
-            }
-        }
-        # check to see if there is a pseudo-array. (more than one
-        # child-node with the same name that must be handled as an array)
-        $node.ChildNodes | #we just group the names and create an empty array for each
-        Group-Object -Property LocalName | where-object { $_.count -gt 1 } | Select-Object Name |
-        ForEach-Object {
-            write-verbose "pseudo-Array $($_.Name)"
-            $oHash.($_.Name) = @() <# create an empty array for each one#>
-        };
-        foreach ($child in $node.ChildNodes) {
-            #now we look at each node in turn.
-            write-verbose "processing the '$($child.LocalName)'"
-            $childName = $child.LocalName
-            if ($child -is [system.xml.xmltext]) {
-                # if it is simple XML text 
-                write-verbose "simple xml $childname";
-                $oHash.$childname += $child.InnerText
-            }
-            # if it has a #text child we may need to cope with attributes
-            elseif ($child.FirstChild.Name -eq '#text' -and $child.ChildNodes.Count -eq 1) {
-                write-verbose "text";
-                if ($null -ne $child.Attributes) {
-                    # an attribute; we need to record the text with the #text label and preserve all the attributes
-                    $aHash = [ordered]@{ };
-                    $child.Attributes | ForEach-Object {
-                        $aHash.$($_.FirstChild.parentNode.LocalName) = $_.FirstChild.value
-                    }
-                    #now we add the text with an explicit name
-                    $aHash.'#text' += $child.'#text'
-                    $oHash.$childname += $aHash
-                }
-                else {
-                    #phew, just a simple text attribute. 
-                    $oHash.$childname += $child.FirstChild.InnerText
-                }
-            }
-            elseif ($null -ne $child.'#cdata-section') {
-                # if it is a data section, a block of text that isnt parsed by the parser,
-                # but is otherwise recognized as markup
-                write-verbose "cdata section";
-                $oHash.$childname = $child.'#cdata-section'
-            }
-            elseif ($child.ChildNodes.Count -gt 1 -and ($child | Get-Member -MemberType Property).Count -eq 1) {
-                $oHash.$childname = @()
-                foreach ($grandchild in $child.ChildNodes) {
-                    $oHash.$childname += (ConvertFrom-XML $grandchild)
-                }
-            }
-            else {
-                # create an array as a value  to the hashtable element
-                $oHash.$childname += (ConvertFrom-XML $child)
-            }
-        }
-        $oHash
-    }
-}
-
 function Invoke-CastosPodcastSearch {
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline)]
@@ -152,8 +70,11 @@ function Invoke-CastosPodcastSearch {
     $results
 }
 
-# Calculating padding to display for the podcasts found.
-function displayPodcastsFeeds() {
+<#
+.DESCRIPTION
+Calculating console padding to display for the podcasts found.
+#>
+function displayPodcastsFeeds {
     param(
         [Parameter(Mandatory = $true)]
         [ValidateScript( { $($null -ne $_) -and $($_.count -ne 0) })]
@@ -187,34 +108,7 @@ function displayPodcastsFeeds() {
     $host.UI.RawUI.ForegroundColor = $origBgColor
 }
 
-function Get-All-Podcast-Episodes-XML() {
-    param (
-        [Parameter(Mandatory = $true)]
-        [string] $URI
-    )
-    [XML] (Invoke-WebRequest -Uri $URI).Content
-}
-
-function Convert-XML-To-HashList() {
-    param (
-        [Parameter(Mandatory = $true)]
-        [XML] $Xml
-    )
-    $table = @()
-    try {
-        $Xml.rss.channel.item | ForEach-Object { # order preserved
-            #  ConvertFrom-XML leaves '#text' keys; duplicates also found.
-            #  Formating to eliminate '#text' keys and or duplicates.
-            $tmp = Format-Episode -Episode $($_ | ConvertFrom-XML)
-            $table += $($tmp)
-        }
-    }
-    catch {
-        throw "Failed to convert XML to List. $($_.ErrorDetails), $($_.ScriptStackTrace)."
-    }
-    $table
-}
-function Approve-String() {
+function Approve-String {
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline)]
         [string]$ToSanitize
@@ -229,28 +123,7 @@ function Approve-String() {
     $ToSanitize
 }
 
-function Format-Episode() {
-    param(
-        [Parameter(Mandatory = $true)]
-        [hashtable] $Episode
-    )
-    if ($Episode.title.Count -eq 1 -and $Episode.title.Keys -notcontains '#text') {
-    }
-    elseif ($Episode.title.Keys -contains '#text' -and $Episode.title.Keys.Count -gt 1) {
-        $tmp = $Episode.title[0].'#text'
-        $Episode.title = $tmp
-    }
-    elseif ($Episode.title.Keys -contains '#text') {
-        $tmp = $Episode.title.'#text'
-        $Episode.title = $tmp
-    }
-    elseif ($Episode.title.Count -ne 1 -and $Episode.title.GetType() -ne [string]) {
-        throw "Unexpected episode title Key was found."
-    }
-    $Episode
-}
-
-function Get-Podcast-Episode-List() {
+function Get-Podcast-Episode-List {
     param(
         [Parameter(Mandatory = $true)]
         [ValidateScript({ Test-Path -Path $_ -PathType Leaf })]
@@ -259,7 +132,7 @@ function Get-Podcast-Episode-List() {
     [array] $(Get-Content -Path $File | ConvertFrom-Json -AsHashtable)
 }
 
-function Get-Last-Write-Time() {
+function Get-Last-Write-Time {
     param(
         [Parameter(Mandatory = $true)]
         [ValidateScript({ Test-Path -Path $_ -PathType Leaf })]
@@ -268,7 +141,7 @@ function Get-Last-Write-Time() {
     $(Get-ChildItem -Path $File | Select-Object -Property LastWriteTime).LastWriteTime
 }
 
-function Write-Episodes-To-Json() {
+function Write-Episodes-To-Json {
     param(
         [Parameter(Mandatory = $true)]
         [array] $Episodes,
@@ -285,6 +158,9 @@ function Write-Episodes-To-Json() {
     Generate or update a podcast episode file.
 .DESCRIPTION
     A JSON file is used to create and store episode lists. 
+
+    Check if a file already exists. If there are differences, than update the file.
+    TODO: instead of writing entire file, only update the changes.
 .NOTES
     Episodes are automatically updated if the last write time for the file has been
     longer than 12 hours.
@@ -296,7 +172,7 @@ function Write-Episodes-To-Json() {
     Forces search for episodes and updated for the given $podcast even if the last write
     time was less than 12 hours.
 #>
-function Update-Episodes() {
+function Update-Episodes {
     param(
         [Parameter(Mandatory = $true)]
         [hashtable] $Podcast,
@@ -307,21 +183,19 @@ function Update-Episodes() {
     $episodesLatest = @()
     $hoursToCheckAgain = 12
     $podcastTitle = Approve-String -ToSanitize $Podcast.title
-    $episodesFile = "$podcastTitle.json"
-    # Check if episodes file exists.
-    if ( ( Test-Path -Path "$episodesFile" -PathType Leaf ) ) {
+    $episodesFile = $setup.prefix_episode_list + "$podcastTitle.json"
+    if ( Test-Path -Path "$episodesFile" -PathType Leaf ) {
         $episodesLocal = Get-Podcast-Episode-List -File $episodesFile
         if ("null" -eq $episodesLocal) {
             throw "File provided contained 'null'. Delete '$episodesFile' and try again."
         }
-        # Check if last updated greater than last checked.
         $lastWriteTimeDifference = $(Get-Date) - $(Get-Last-Write-Time -File $episodesFile)
         $hoursSinceLastWritten = $lastWriteTimeDifference.Hours
         if ( $hoursSinceLastWritten -ge $hoursToCheckAgain -or $Force ) {
             write-host "Checking '$($Podcast.title)' for new episodes ..."
-            $episodesLatest = Convert-XML-To-HashList -Xml $(Get-All-Podcast-Episodes-XML -URI $Podcast.url)
+            # TODO: update only those different to save time.
+            $episodesLatest = ConvertFrom-PodcastWebRequestContent -Request $(Invoke-WebRequest -Uri $Podcast.url)
             if ( $episodesLatest[0].title -ne $episodesLocal[0].title ) {
-                # Save the latest episodes as the new baseline.
                 Write-Episodes-To-Json $episodesLatest -File $episodesFile
                 return $episodesLatest
             }
@@ -329,13 +203,13 @@ function Update-Episodes() {
     }
     else {
         Write-Host "Selected '$($Podcast.title)'. Performing first time episode gathering ..."
-        Write-Episodes-To-Json -Episodes $(Convert-XML-To-HashList -Xml $(Get-All-Podcast-Episodes-XML -URI $Podcast.url)) -File $episodesFile
+        Write-Episodes-To-Json -Episodes $(ConvertFrom-PodcastWebRequestContent -Request $(Invoke-WebRequest -Uri $Podcast.url)) -File $episodesFile
     }
     $(Get-Podcast-Episode-List -File $episodesFile)
 }
 
 # Writing console output for episodes, specifically: index | episode-title | publication date
-function Write-Episodes() {
+function Write-Episodes {
     param(
         # Array containing hashtables of episode entries.
         [Parameter(Mandatory = $true)]
@@ -357,7 +231,9 @@ function Write-Episodes() {
         " | " + $($_.pubDate.Values).padleft($ePubDatePadding) | Out-Host
     }
 }
-function Find-Episode() {
+
+<# TODO: This just downloads a file at the specified URI - better to rename as it is unclear anything is written #>
+function Get-Episode {
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline)]
         [string]$URI,

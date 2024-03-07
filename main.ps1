@@ -1,7 +1,7 @@
 $settings_file = 'conf.json'
 $settings = $(get-content -Path $settings_file -Raw | ConvertFrom-Json)
 
-. .\utils.ps1
+. '.\include.ps1'
 
 # $toStream = $true
 $toStream = $false
@@ -41,7 +41,7 @@ else {
     $file = join-path (Get-location) "${title}.mp3"
     if ( !(Test-Path -PathType Leaf -Path $file) ) {
         $url = $episode.enclosure.url
-        Find-Episode -URI $url -Path $file
+        Get-Episode -URI $url -Path $file
     }
     # Updating Tag Information
     .\working-with-tags.ps1 $episode $file
