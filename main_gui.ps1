@@ -20,6 +20,9 @@ Thanks given to the following:
         https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.combobox.drawitem?view=windowsdesktop-8.0#system-windows-forms-combobox-drawitem
 
     https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.listview.ownerdraw?view=windowsdesktop-8.0&redirectedfrom=MSDN#System_Windows_Forms_ListView_OwnerDraw
+
+    https://htmlcolorcodes.com/color-picker/
+
 #>
 
 Add-Type -assembly System.Windows.Forms
@@ -31,7 +34,7 @@ $script:episodes = @()
 $script:episode = @{}
 
 $screen = [System.Windows.Forms.Screen]::AllScreens
-$script:screenWidth = $screen[0].Bounds.Size.Width  
+$script:screenWidth = $screen[0].Bounds.Size.Width
 $script:screenHeight = $screen[0].Bounds.Size.Height
 $screenHeight25p = [int]($script:screenHeight / 4)
 $screenHeight50p = [int]($screenHeight25p + $screenHeight25p)
@@ -145,9 +148,9 @@ $podcastsListBox.Add_DrawItem({
             $e.Handled = $true
         }
         if (($e.State -band [System.Windows.Forms.DrawItemState]::Selected) -eq [System.Windows.Forms.DrawItemState]::Selected) {
-            $font = New-Object System.Drawing.Font("Arial", 10, [Drawing.FontStyle]::Italic)
-            $bgColor = [System.Drawing.Color]::Indigo
-            $fColor = [System.Drawing.Color]::Beige
+            $font = New-Object System.Drawing.Font("Arial", 10, [Drawing.FontStyle]::Bold)
+            $bgColor = "#5C064F" # [System.Drawing.Color]::Navy
+            $fColor = "#DF9FD6" # [System.Drawing.Color]::Gold
             $bgBrush = [system.drawing.SolidBrush]::new($bgColor)
             try { 
                 $e.Graphics.FillRectangle($bgBrush, $e.Bounds)
@@ -160,8 +163,8 @@ $podcastsListBox.Add_DrawItem({
             }
         }
         else {
-            $bgColor = [System.Drawing.Color]::DarkSlateBlue
-            $fColor = "#cdcdcd"
+            $bgColor = "#3E065C" # [System.Drawing.Color]::MidnightBlue
+            $fColor = "#CC65BD" #[System.Drawing.Color]::Goldenrod
             $bgBrush = [system.drawing.SolidBrush]::new($bgColor)
             $font = New-Object System.Drawing.Font("Arial", 10, [Drawing.FontStyle]::Regular)
             try { 
@@ -202,10 +205,9 @@ $episodeRefreshButton.Dock = 'top'
 $episodeRefreshButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left
 $episodeRefreshButton.Text = " Refresh Episodes List "
 $episodeRefreshButton.FlatStyle = 'Flat'
-$episodeRefreshButton.FlatAppearance.BorderSize = 1
-$episodeRefreshButton.FlatAppearance.BorderColor = "#222222"
-$episodeRefreshButton.BackColor = [System.Drawing.Color]::MidnightBlue
-$episodeRefreshButton.ForeColor = $fColor
+$episodeRefreshButton.FlatAppearance.BorderSize = 0
+$episodeRefreshButton.BackColor = "#064F5C" # [System.Drawing.Color]::MidnightBlue
+$episodeRefreshButton.ForeColor = "#B4CACE" # $fColor
 $episodeRefreshButton.AutoSize = $true
 $episodeRefreshButton.Add_Click({
         param($s, $e)
@@ -248,6 +250,25 @@ $podcastsGroup.Text = "Podcasts"
 [void] $podcastsGroup.Controls.Add($podcastsListBox)
 [void] $podcastsGroup.Controls.Add($episodeRefreshButton)
 
+$episodeInfoSytle = @"
+<style>
+    body {
+        background-color: #1f1f1f;
+        font-family: helvetica;
+        font-size: 80%;
+        color: #637699;
+    }
+    p    {
+        font-family: verdana;
+        font-size: 100%;
+        color: #637699;
+    }
+    a {
+        font-weight: bold;
+        color: #6E4485;
+    }
+</style>
+"@
 
 $episodesListView = New-Object System.Windows.Forms.ListView
 $episodesListView.Dock = 'Fill'
@@ -260,36 +281,25 @@ $episodesListView.FullRowSelect = $true
 $episodesListView.MultiSelect = $false
 $episodesListView.Add_SelectedIndexChanged({
         param($s, $e)
-        $script:episode = $script:episodes[$script:episodes.title.indexof($s.SelectedItems.text)]
-        $episodeInfo.ResetText()
-        if ($script:episode.title) {
-            $episodeInfo.Text += "Title: $($script:episode.title)`n"
+        $script:episode = $script:episodes[$script:episodes.title.indexof($s.SelectedItems.text)]      
+        $info = "<h1>$($script:episode.title)</h1>" + `
+            $(($script:episode.author) ? "<h2>$($script:episode.author)</h2>" : "" ) + `
+            "<p><a href='$($script:episode.enclosure.url)'>Navigate to Episode URL</a></p>"
+        if ($script:episode.encoded) {
+            $episodeInfo.DocumentText = $episodeInfoSytle + $info + $script:episode.encoded
         }
-        if ($script:episode.description) {
-            if ($script:episode.encoded) {
-                $episodeInfo.Text += "$($script:episode.encoded)`n"
-            } else {
-                $episodeInfo.Text += "Description: $($script:episode.description)`n"
-            }
-        }
-        if ($script:episode.author) {
-            $episodeInfo.Text += "Author: $($script:episode.author)`n"
-        }
-        if ($script:episode.enclosure.url) {
-            "Link: $($script:episode.enclosure.url)`n"
+        else {
+            $episodeInfo.DocumentText = $episodeInfoSytle + $info + $script:episode.description
         }
     })
 
-$episodeInfo = New-Object System.Windows.Forms.RichTextBox
+$episodeInfo = New-Object System.Windows.Forms.WebBrowser
 $episodeInfo.Dock = 'Fill'
-$episodeInfo.Text = " `n" + `
-    "   First, select a podcast (left) then select an episode from the generated list (above).`n" + `
-    "   If podcasts aren't listed, run the setup.ps1 script followed by the create-update-feeds.ps1 script."
-$episodeInfo.Multiline = $true
-$episodeInfo.ReadOnly = $true
-$episodeInfo.BorderStyle = 'None'
-$episodeInfo.BackColor = $bColor
-$episodeInfo.ForeColor = $fColor
+$episodeInfo.DocumentText = ($episodeInfoSytle + `
+    "<p>" + `
+    "First, select a podcast (left) then select an episode from the generated list (above). " + `
+    "If podcasts aren't listed, run the setup.ps1 script followed by the create-update-feeds.ps1 script. " + `
+    "</p>")
 
 $episodePlayButton = New-Object System.Windows.Forms.Button
 $episodePlayButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left
@@ -479,14 +489,12 @@ $playbackRateSlider.Value = $playbackRateSliderDefault
 $playbackRateSlider.Margin = 0
 $playbackRateSlider.Padding = 0
 $playbackRateSlider.Width = 150
-# $playbackRateSlider.Width = ($sliderPanel.Width - $playbackRateLabel.Width - $playbackRateLabelValue.Width - $playbackRateFasterButton.Width - $playbackRateSlowerButton.Width - 30)
 $playbackRateSlider.AutoSize = $true
 $playbackRateSlider.TickStyle = 'Both'
 $playbackRateSlider.Add_ValueChanged({
         param($s, $e)
         $playbackRateLabelValue.Text = "$(getPlaybackRateSliderValue)"
     })
-# $playbackRateSlider.Anchor = ([System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left)
 
 $playbackRateLabelValue = New-Object System.Windows.Forms.TextBox
 $playbackRateLabelValue.Text = "$(getPlaybackRateSliderValue)"
@@ -551,7 +559,7 @@ $podcastsListBox.TabIndex = 1
 $splitEpisodes = New-Object System.Windows.Forms.SplitContainer
 $splitEpisodes.Dock = 'Fill'
 $splitEpisodes.Orientation = [System.Windows.Forms.Orientation]::Horizontal
-$splitEpisodes.SplitterDistance = 65
+$splitEpisodes.SplitterDistance = 35
 $splitEpisodes.TabIndex = 2
 $splitEpisodes.SplitterWidth = 3 
 $splitEpisodes.Location = New-Object System.Drawing.Point(0, 0);
@@ -566,7 +574,6 @@ $splitEpisodes.Panel2.Controls.Add($playButtonsPanel)
 $splitEpisodes.Panel2.Controls.Add($sliderPanel)
 
 $splitEpisodes.Panel2.Name = "Episode Information"
-$episodeInfo.TabIndex = 4
 
 $split.Panel2.Controls.Add($splitEpisodes)
 $split.Panel2.BackColor = "#222222" # Color of the horizontal bar.
