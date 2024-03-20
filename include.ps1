@@ -10,4 +10,5 @@ Change with caution!
 $CONFIG_FILE_NAME = "config.ini"
 $setup = Get-Content -Path ".\$CONFIG_FILE_NAME" -Raw | ConvertFrom-StringData
 $FEEDS_FILE = $setup.file_feeds
+$SEARCH_FILE = $setup.file_search
 $EPISODE_PREFIX = $setup.prefix_episode_list

@@ -1,7 +1,5 @@
-$settings_file = 'conf.json'
-$settings = $(get-content -Path $settings_file -Raw | ConvertFrom-Json)
 
-. .\utils.ps1
+. '.\include.ps1'
 
 function write-host-choices() {
     Write-Host " s : search and add a new podcast"
@@ -32,13 +30,13 @@ while ($isActive) {
                         Write-Host "Searching for '$choice' podcasts ..."
                         $search = $(Invoke-CastosPodcastSearch -Podcast $choice)
                         if ($search -ne "No feeds found.") {
-                            $search | ConvertTo-Json | Out-File -FilePath $settings.file.search
+                            $search | ConvertTo-Json | Out-File -FilePath $SEARCH_FILE
                             # Write-Host "The following podcasts were found:"
                             # displayPodcasts -Podcast $search
                             $isAdding = $true
                             while ($isAdding) {
                                 try {
-                                    $search = [array]$(Get-Content -Path $settings.file.search -Raw | ConvertFrom-Json -AsHashtable)
+                                    $search = [array]$(Get-Content -Path $SEARCH_FILE -Raw | ConvertFrom-Json -AsHashtable)
                                     displayPodcastsFeeds -Podcasts $search -ErrorAction Stop
                                     $choice = Read-Host "Provide the podcast # (above) to add it or 'q' to enter a new search"
                                     switch ($choice) {
@@ -48,15 +46,25 @@ while ($isActive) {
                                         }
                                         Default {
                                             $feed = @($search[[int]$choice])
-                                            $feeds = [array]$(Get-Content -Path $settings.file.feeds -Raw | ConvertFrom-Json -AsHashtable)
+                                            $feeds = [array]$(Get-Content -Path $FEEDS_FILE -Raw | ConvertFrom-Json -AsHashtable)
                                             if ($feeds.title -contains $feed.title -and $feeds.author -contains $feed.author) {
                                                 Write-Host "Podcast $($feed.title) already exists. Choose a different podcast."
-                                            }
+                                            } 
                                             else {
-                                                $feeds += @( $feed )
-                                                $feeds | ConvertTo-Json | Out-File $settings.file.feeds
-                                                write-host "Added $($feed.title) by $($feed.author) to podcast feeds."
-                                                $isAdding = $false
+                                                <#
+                                                TODO: would be best to Convert System.Net.Http.HttpResponseMessage (via exception) to Microsoft.PowerShell.Commands.WebResponseObject (for XML) but unable to find a viable solution to do so ... for now checking catch [System.Net.Http.HttpRequestException] {
+                                                $request = @{ 'Content' = $($_.Exception.Response.Content | ConvertTo-Html) | Join-String }
+                                                #>
+                                                try {
+                                                    Get-Podcast-Feed -URI $feed.url
+                                                    $feeds += @( $feed )
+                                                    $feeds | ConvertTo-Json | Out-File $FEEDS_FILE
+                                                    write-host "Added $($feed.title) by $($feed.author) to podcast feeds."
+                                                    $isAdding = $false
+                                                }
+                                                catch [System.Net.Http.HttpRequestException] {
+                                                    Write-Host "Podcast $($feed.title) appears to exist behind a paywall. Choose a different podcast."
+                                                }
                                             }
                                         }
                                     }
@@ -77,7 +85,7 @@ while ($isActive) {
         }
         "l" {
             try {
-                $feeds = [array]$(Get-Content -Path $settings.file.feeds -Raw | ConvertFrom-Json -AsHashtable)
+                $feeds = [array]$(Get-Content -Path $FEEDS_FILE -Raw | ConvertFrom-Json -AsHashtable)
                 Write-Host-Welcome -Message " Podcasts List " -delimiter " "
                 displayPodcastsFeeds -Podcasts $feeds
                 Write-Host-Welcome -Message " End of Podcast List " -delimiter " "
@@ -94,7 +102,7 @@ while ($isActive) {
                         $invalidCount++
                     }
                 }
-                $feedsToKeep | ConvertTo-Json | Out-File $settings.file.feeds
+                $feedsToKeep | ConvertTo-Json | Out-File $FEEDS_FILE
                 Write-Debug "Removed $invalidCount podcast(s)."
                 Write-Host-Welcome -Message " Podcasts List "
                 displayPodcastsFeeds -Podcasts $feedsToKeep
@@ -110,7 +118,7 @@ while ($isActive) {
             $isRemoving = $true
             while ($isRemoving) {
                 try {
-                    $feeds = [array]$(Get-Content -Path $settings.file.feeds -Raw | ConvertFrom-Json -AsHashtable)
+                    $feeds = [array]$(Get-Content -Path $FEEDS_FILE -Raw | ConvertFrom-Json -AsHashtable)
                     displayPodcastsFeeds -Podcasts $feeds -ErrorAction Stop
                     $choice = Read-Host " Provide the # from above for the podcast to remove" # TODO multiple podcasts or single
                     switch ($choice) {
@@ -126,7 +134,7 @@ while ($isActive) {
                                     $feedsToKeep += $feeds[$i]
                                 }
                             }
-                            $feedsToKeep | ConvertTo-Json | Out-File $settings.file.feeds
+                            $feedsToKeep | ConvertTo-Json | Out-File $FEEDS_FILE
                             write-host "Removed $($feeds[$index].title) by $($feeds[$index].author) from podcast feeds."
                             $isRemoving = $false
                         }

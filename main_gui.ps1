@@ -27,7 +27,7 @@ Thanks given to the following:
 
 Add-Type -assembly System.Windows.Forms
 
-. '.\include.ps1'
+. '.\include.ps1' # .\utils.ps1
 
 $script:podcasts = [array]$(Get-Content -Path $FEEDS_FILE -Raw | ConvertFrom-Json -AsHashtable);
 $script:episodes = @()
@@ -48,39 +48,68 @@ $form.BackColor = "#232323"
 $form.ForeColor = "#aeaeae"
 $form.Text = "Podcasts"
 
+$guiWidth50p = [int]($form.Size.Width / 2)
+$menuButtonBColor = "#007FD3"
+$menuButtonFColor = "#002035"
+
 $titleLabel = New-Object System.Windows.Forms.Label
 $titleLabel.Text = "Podcasts"
 $titleLabel.Font = New-Object Drawing.Font("Arial", 12, [System.Drawing.FontStyle]::Bold)
 $titleLabel.TextAlign = 'MiddleCenter'
 $titleLabel.ForeColor = "#cdcdcd"
-$titleLabel.Anchor = [System.Windows.Forms.AnchorStyles]::Left
-$titleLabel.AutoSize = $true
+
+$minmizeButton = New-Object System.Windows.Forms.Button
+$minmizeButton.FlatStyle = 'Flat'
+$minmizeButton.FlatAppearance.BorderSize = 0
+$minmizeButton.Text = "―"
+$minmizeButton.TextAlign = 'MiddleCenter'
+$minmizeButton.BackColor = $menuButtonBColor
+$minmizeButton.ForeColor = $menuButtonFColor
+$minmizeButton.Padding = 0
+$minmizeButton.Margin = 0
+$minmizeButton.AutoSize = $true
+$minmizeButton.Anchor = [System.Windows.Forms.AnchorStyles]::Right
+$minmizeButtonToolTip = New-Object System.Windows.Forms.ToolTip
+$minmizeButtonToolTip.SetToolTip($minmizeButton, "Minimize")
+$minmizeButton.Add_Click({
+        $form.WindowState = [System.Windows.Forms.FormWindowState]::Minimized
+    })
 
 $closeButton = New-Object System.Windows.Forms.Button
 $closeButton.FlatStyle = 'Flat'
 $closeButton.FlatAppearance.BorderSize = 0
-$closeButton.Text = " X "
+$closeButton.Text = "X"
 $closeButton.TextAlign = 'MiddleCenter'
-$closeButton.Add_Click({ $form.Close() })
-$closeButton.BackColor = "#990000"
-$closeButton.ForeColor = "#efefef"
+$closeButton.BackColor = $menuButtonBColor
+$closeButton.ForeColor = $menuButtonFColor
 $closeButton.Padding = 0
 $closeButton.Margin = 0
-# $closeButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
-$closeButton.Anchor = [System.Windows.Forms.AnchorStyles]::Right
 $closeButton.AutoSize = $true
+$closeButton.Anchor = [System.Windows.Forms.AnchorStyles]::Right
 $closeButtonTooltip = New-Object System.Windows.Forms.ToolTip
 $closeButtonTooltip.SetToolTip($closeButton, "Close")
+$closeButton.Add_Click({ $form.Close() })
 
 # Overriding default menu appearance, and controls.
 $menu = new-object System.Windows.Forms.TableLayoutPanel
+$menu.ColumnCount = 2
+[void] $menu.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Absolute, $guiWidth50p)))
+[void] $menu.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Absolute, $guiWidth50p)))
 $menu.BackColor = "#343434"
 $menu.Size = New-Object System.Drawing.Size($script:screenWidth, ($closeButton.Size.Height + 4))
 $menu.Location = New-Object System.Drawing.Point(0, $menu.Size.Height)
 $menu.Dock = [System.Windows.Forms.DockStyle]::Top
-# $TableLayoutPanel.Controls.Add($Control, $ColumnIndex, $RowIndex)
-[void]$menu.Controls.Add($titleLabel, 0, 0)
-[void]$menu.Controls.Add($closeButton, 1, 0)
+
+$menuButtonsFlowPlanel = New-Object System.Windows.Forms.FlowLayoutPanel
+$menuButtonsFlowPlanel.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
+$menuButtonsFlowPlanel.Size = New-Object System.Drawing.Size(($closeButton.Size.Width + $minmizeButton.Size.Width), $menu.Height)
+$menuButtonsFlowPlanel.Margin = 0
+$menuButtonsFlowPlanel.Padding = 0
+[void] $menuButtonsFlowPlanel.Controls.Add($minmizeButton)
+[void] $menuButtonsFlowPlanel.Controls.Add($closeButton)
+
+[void] $menu.Controls.Add($titleLabel, 0, 0) # ($Control, $ColumnIndex, $RowIndex)
+[void] $menu.Controls.Add($menuButtonsFlowPlanel, 1, 0)
 
 $script:mouseDown = $false
 $script:lastLocation = New-Object Drawing.Point
@@ -113,16 +142,19 @@ $menu.Add_MouseUp({
         $script:mouseDown = $false
     })
 
-$bColor = "#323232"
-$fColor = "#bebebe"
-
+$podcastsListBoxBackColor = $menuButtonBColor
+$podcastsListBoxForeColor = "#1A0B00"
+$podcastsListBoxBackColorSelected = "#003253"
+$podcastsListBoxForeColorSelected = "#D3BD00"
 $podcastsListBox = New-Object System.Windows.Forms.ListBox
+$podcastsListBox.Padding = 0
+$podcastsListBox.Margin = 0
 $podcastsListBox.Dock = 'Fill' # Covering episode refresh button
 $podcastsListBox.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left
 $podcastsListBox.Location = New-Object System.Drawing.Point(0, $menu.Size.Height)
-$podcastsListBox.Size = New-Object Drawing.Size @(315, ($form.Height - $menu.Size.Height - $episodeRefreshButton.Size.Height - 200))
-$podcastsListBox.BackColor = $bColor
-$podcastsListBox.ForeColor = $fColor
+$podcastsListBox.Size = New-Object Drawing.Size @(315, ($form.Height - $menu.Size.Height - $episodeCheckButton.Size.Height - 200))
+$podcastsListBox.BackColor = $form.BackColor
+$podcastsListBox.BorderStyle = 'None'
 $podcastsListBox.DrawMode = 'OwnerDrawVariable' # Requires handling MeasureItem and DrawItem.
 $podcastsListBox.Add_MeasureItem({
         param($s, $e)
@@ -149,13 +181,11 @@ $podcastsListBox.Add_DrawItem({
         }
         if (($e.State -band [System.Windows.Forms.DrawItemState]::Selected) -eq [System.Windows.Forms.DrawItemState]::Selected) {
             $font = New-Object System.Drawing.Font("Arial", 10, [Drawing.FontStyle]::Bold)
-            $bgColor = "#5C064F" # [System.Drawing.Color]::Navy
-            $fColor = "#DF9FD6" # [System.Drawing.Color]::Gold
-            $bgBrush = [system.drawing.SolidBrush]::new($bgColor)
+            $bgBrush = [system.drawing.SolidBrush]::new($podcastsListBoxBackColorSelected)
             try { 
                 $e.Graphics.FillRectangle($bgBrush, $e.Bounds)
                 [system.windows.forms.TextRenderer]::DrawText($e.Graphics, $txt, $font,
-                    $e.Bounds, $fColor, $bgColor, 
+                    $e.Bounds, $podcastsListBoxForeColorSelected, $podcastsListBoxBackColorSelected, 
                         ([System.Windows.Forms.TextFormatFlags]::Left -bor [System.Windows.Forms.TextFormatFlags]::VerticalCenter))
             }
             finally {
@@ -163,14 +193,12 @@ $podcastsListBox.Add_DrawItem({
             }
         }
         else {
-            $bgColor = "#3E065C" # [System.Drawing.Color]::MidnightBlue
-            $fColor = "#CC65BD" #[System.Drawing.Color]::Goldenrod
-            $bgBrush = [system.drawing.SolidBrush]::new($bgColor)
+            $bgBrush = [system.drawing.SolidBrush]::new($podcastsListBoxBackColor)
             $font = New-Object System.Drawing.Font("Arial", 10, [Drawing.FontStyle]::Regular)
             try { 
                 $e.Graphics.FillRectangle($bgBrush, $e.Bounds)
                 [system.windows.forms.TextRenderer]::DrawText($e.Graphics, $txt, $font,
-                    $e.Bounds, $fColor, $bgColor, 
+                    $e.Bounds, $podcastsListBoxForeColor, $podcastsListBoxBackColor, 
                         ([System.Windows.Forms.TextFormatFlags]::Left -bor [System.Windows.Forms.TextFormatFlags]::VerticalCenter))
             }
             finally {
@@ -178,77 +206,6 @@ $podcastsListBox.Add_DrawItem({
             }
         }
     })
-$script:episodesRefreshing = $false
-$podcastsListBox.Add_SelectedIndexChanged({
-        param($s, $e)
-        if ( !$script:episodesRefreshing ) {
-            $script:episodesRefreshing = $true
-            $episodesListView.Clear() # Removes all headers & items.
-            $podcast = $script:podcasts[$script:podcasts.title.IndexOf($s.Text)]
-            $script:episodes = Update-Episodes -Podcast $podcast
-            [void]$episodesListView.Columns.Add("Episode", 350)
-            [void]$episodesListView.Columns.Add("Date", 150)
-            Foreach ($episode in $script:episodes) {
-                $item = New-Object system.Windows.Forms.ListViewItem
-                $item.Text = $episode.title # Column 1
-                $item.SubItems.Add($episode.pubDate) # column 2
-                $episodesListView.Items.Add($item)
-            }
-            $script:episodesRefreshing = $false
-        }
-        else {
-            Write-Host "Please wait while episodes are being gathered."
-        }
-    })
-$episodeRefreshButton = New-Object System.Windows.Forms.Button
-$episodeRefreshButton.Dock = 'top'
-$episodeRefreshButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left
-$episodeRefreshButton.Text = " Refresh Episodes List "
-$episodeRefreshButton.FlatStyle = 'Flat'
-$episodeRefreshButton.FlatAppearance.BorderSize = 0
-$episodeRefreshButton.BackColor = "#064F5C" # [System.Drawing.Color]::MidnightBlue
-$episodeRefreshButton.ForeColor = "#B4CACE" # $fColor
-$episodeRefreshButton.AutoSize = $true
-$episodeRefreshButton.Add_Click({
-        param($s, $e)
-        if ($null -ne $podcastsListBox.SelectedItem) {
-            if ( !$script:episodesRefreshing ) {
-                $script:episodesRefreshing = $true
-                $episodesListView.Clear() # Removes all headers & items.
-                $podcast = $script:podcasts[$script:podcasts.title.IndexOf($podcastsListBox.SelectedItem)]
-                write-host "Gathering all episodes for '$($podcast.title)', as of $(Get-Date) ..."
-                $podcastEpisodesTitle = Approve-String -ToSanitize $podcast.title
-                $podcastEpisodesFile = "$podcastEpisodesTitle.json"
-                Write-Episodes-To-Json -Episodes $(ConvertFrom-PodcastWebRequestContent -Request $(Invoke-WebRequest -Uri $podcast.url)) -File $podcastEpisodesFile
-                $script:episodes = Get-Podcast-Episode-List -File $podcastEpisodesFile
-                [void]$episodesListView.Columns.Add("Episode", 350)
-                [void]$episodesListView.Columns.Add("Date", 150)
-                Foreach ($episode in $script:episodes) {
-                    $item = New-Object system.Windows.Forms.ListViewItem
-                    $item.Text = $episode.title # Column 1
-                    $item.SubItems.Add($episode.pubDate) # column 2
-                    $episodesListView.Items.Add($item)
-                }
-                $script:episodesRefreshing = $false
-            }
-            else {
-                Write-Host "Please wait while episodes are being gathered."
-            }
-        }
-        else {
-            $b = [System.Windows.Forms.MessageBoxButtons]::OK
-            $i = [System.Windows.Forms.MessageBoxIcon]::Information
-            $m = "A podcast must first be selected in order to refresh its episodes."
-            $t = “Select a Podcast”
-            [System.Windows.Forms.MessageBox]::Show($m, $t, $b, $i)
-        }
-    })
-
-$podcastsGroup = new-object System.Windows.Forms.GroupBox
-$podcastsGroup.Dock = 'fill'
-$podcastsGroup.Text = "Podcasts"
-[void] $podcastsGroup.Controls.Add($podcastsListBox)
-[void] $podcastsGroup.Controls.Add($episodeRefreshButton)
 
 $episodeInfoSytle = @"
 <style>
@@ -270,11 +227,111 @@ $episodeInfoSytle = @"
 </style>
 "@
 
+
+$podcastsListBox.Add_SelectedIndexChanged({
+        param($s, $e)
+        $episodeInfo.DocumentText = ($episodeInfoSytle + `
+                "<p>First, select a podcast (left) then select an episode from the generated list (below). " + `
+                "If podcasts aren't listed, run the setup.ps1 script followed by the create-update-feeds.ps1 script. " + `
+                "</p>")
+        $episodesListView.Clear() # Removes all headers & items.
+        $podcast = $script:podcasts[$script:podcasts.title.IndexOf($s.Text)]
+        $script:episodes = Update-Episodes -Podcast $podcast
+        [void]$episodesListView.Columns.Add("Episode", 350)
+        [void]$episodesListView.Columns.Add("Date", 150)
+        Foreach ($episode in $script:episodes) {
+            $item = New-Object system.Windows.Forms.ListViewItem
+            $item.Text = $episode.title # Column 1
+            $item.SubItems.Add($episode.pubDate) # column 2
+            $episodesListView.Items.Add($item)
+        }
+    })
+
+$episodeCheckButton = New-Object System.Windows.Forms.Button
+$episodeCheckButton.Margin = 0
+$episodeCheckButton.Padding = 0
+$episodeCheckButton.Dock = 'top'
+$episodeCheckButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left
+$episodeCheckButton.Text = " Check for new Episodes "
+$episodeCheckButton.FlatStyle = 'Flat'
+$episodeCheckButton.FlatAppearance.BorderSize = 0
+$episodeCheckButton.BackColor = $menuButtonBColor
+$episodeCheckButton.ForeColor = $menuButtonFColor
+$episodeCheckButton.Font = New-Object Drawing.Font("Consolas", 8, [System.Drawing.FontStyle]::Bold)
+$episodeCheckButton.AutoSize = $true
+$episodeCheckButtonToolTip = New-Object System.Windows.Forms.ToolTip
+$episodeCheckButtonToolTip.SetToolTip($episodeCheckButton, "Using the selected podcast (below), search for new episodes")
+$episodeCheckButton.Add_Click({
+        param($s, $e)
+        if ($null -ne $podcastsListBox.SelectedItem) {
+            if ( !$script:episodesRefreshing ) {
+                $script:episodesRefreshing = $true
+                $episodesListView.Clear() # Removes all headers & items.
+                $podcast = $script:podcasts[$script:podcasts.title.IndexOf($podcastsListBox.SelectedItem)]
+                write-host "$([char]27 + '[3m')Searching for all episodes of '$($podcast.title)' (as of $(Get-Date)) . . . $([char]27 + '[0m')" -ForegroundColor Gray
+                $podcastEpisodesTitle = Approve-String -ToSanitize $podcast.title
+                $podcastEpisodesFile = "$EPISODE_PREFIX$podcastEpisodesTitle.json"
+                Write-Episodes-To-Json -Episodes $(ConvertFrom-PodcastWebRequestContent -Request $(Get-Podcast-Feed -URI $Podcast.url)) -File $podcastEpisodesFile
+                $script:episodes = Get-Podcast-Episode-List -File $podcastEpisodesFile
+                [void]$episodesListView.Columns.Add("Episode", 350)
+                [void]$episodesListView.Columns.Add("Date", 150)
+                Foreach ($episode in $script:episodes) {
+                    $item = New-Object system.Windows.Forms.ListViewItem
+                    $item.Text = $episode.title # Column 1
+                    $item.SubItems.Add($episode.pubDate) # column 2
+                    $episodesListView.Items.Add($item)
+                }
+                $script:episodesRefreshing = $false
+            }
+            else {
+                Write-Host "Please wait while episodes are being gathered."
+            }
+        }
+        else {
+            $b = [System.Windows.Forms.MessageBoxButtons]::OK
+            $i = [System.Windows.Forms.MessageBoxIcon]::Information
+            $m = "Select a podcast (left) in order to check for new episodes."
+            $t = “No Podcast Selected”
+            [System.Windows.Forms.MessageBox]::Show($m, $t, $b, $i)
+        }
+    })
+
+$episodeFeedsButton = New-Object System.Windows.Forms.Button
+$episodeFeedsButton.Margin = 0
+$episodeFeedsButton.Padding = 0
+$episodeFeedsButton.Dock = 'top'
+$episodeFeedsButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left
+$episodeFeedsButton.Text = " Latest Episodes for All Podcast  "
+$episodeFeedsButton.FlatStyle = 'Flat'
+$episodeFeedsButton.FlatAppearance.BorderSize = 0
+$episodeFeedsButton.BackColor = $menuButtonBColor
+$episodeFeedsButton.ForeColor = $menuButtonFColor
+$episodeFeedsButton.Font = New-Object Drawing.Font("Consolas", 8, [System.Drawing.FontStyle]::Bold)
+$episodeFeedsButton.AutoSize = $true
+$episodeFeedsButtonToolTip = New-Object System.Windows.Forms.ToolTip
+$episodeFeedsButtonToolTip.SetToolTip($episodeFeedsButton, "List the latest episodes for all podcasts")
+$episodeFeedsButton.Add_Click({
+        param($s, $e)
+        # TODO: list the latest episodes ~ like 10 latest sorted by date; newest first
+    })
+
+$podcastsGroup = new-object System.Windows.Forms.GroupBox
+$podcastsGroup.Dock = 'fill'
+$podcastsGroup.FlatStyle = 'Flat'
+$podcastsGroup.Padding = 10
+$podcastsGroup.Margin = 0
+# $podcastsGroup.Text = "Options"
+[void] $podcastsGroup.Controls.Add($podcastsListBox)
+[void] $podcastsGroup.Controls.Add($episodeCheckButton)
+[void] $podcastsGroup.Controls.Add($episodeFeedsButton)
+
+$episodesListViewBackColor = "#323232"
+$episodesListViewForeColor = "#bebebe"
 $episodesListView = New-Object System.Windows.Forms.ListView
 $episodesListView.Dock = 'Fill'
 $episodesListView.BorderStyle = 'None'
-$episodesListView.BackColor = $bColor
-$episodesListView.ForeColor = $fColor
+$episodesListView.BackColor = $episodesListViewBackColor
+$episodesListView.ForeColor = $episodesListViewForeColor
 $episodesListView.HeaderStyle = 'Nonclickable'
 $episodesListView.View = 'Details'
 $episodesListView.FullRowSelect = $true
@@ -283,7 +340,7 @@ $episodesListView.Add_SelectedIndexChanged({
         param($s, $e)
         $script:episode = $script:episodes[$script:episodes.title.indexof($s.SelectedItems.text)]      
         $info = "<h1>$($script:episode.title)</h1>" + `
-            $(($script:episode.author) ? "<h2>$($script:episode.author)</h2>" : "" ) + `
+        $(($script:episode.author) ? "<h2>$($script:episode.author)</h2>" : "" ) + `
             "<p><a href='$($script:episode.enclosure.url)'>Navigate to Episode URL</a></p>"
         if ($script:episode.encoded) {
             $episodeInfo.DocumentText = $episodeInfoSytle + $info + $script:episode.encoded
@@ -296,19 +353,21 @@ $episodesListView.Add_SelectedIndexChanged({
 $episodeInfo = New-Object System.Windows.Forms.WebBrowser
 $episodeInfo.Dock = 'Fill'
 $episodeInfo.DocumentText = ($episodeInfoSytle + `
-    "<p>" + `
-    "First, select a podcast (left) then select an episode from the generated list (above). " + `
-    "If podcasts aren't listed, run the setup.ps1 script followed by the create-update-feeds.ps1 script. " + `
-    "</p>")
+        "<p>" + `
+        "First, select a podcast (left) then select an episode from the generated list (below). " + `
+        "If podcasts aren't listed, run the setup.ps1 script followed by the create-update-feeds.ps1 script. " + `
+        "</p>")
 
+$episodePlayButtonBackColor = "#ffa800"
+$episodePlayButtonForeColor = "#212121"
 $episodePlayButton = New-Object System.Windows.Forms.Button
 $episodePlayButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left
 $episodePlayButton.Text = " Stream in VLC "
 $episodePlayButton.FlatStyle = 'Flat'
 $episodePlayButton.FlatAppearance.BorderSize = 1
 $episodePlayButton.FlatAppearance.BorderColor = "#222222"
-$episodePlayButton.BackColor = $bColor
-$episodePlayButton.ForeColor = $fColor
+$episodePlayButton.BackColor = $episodePlayButtonBackColor
+$episodePlayButton.ForeColor = $episodePlayButtonForeColor
 $episodePlayButton.AutoSize = $true
 $episodePlayButton.Add_Click({
         param($s, $e)
@@ -326,14 +385,16 @@ $episodePlayButton.Add_Click({
         }
     })
 
+$episodeDownloadPlayButtonBackColor = "#ffa800"
+$episodeDownloadPlayButtonForeColor = "#212121"
 $episodeDownloadPlayButton = New-Object System.Windows.Forms.Button
 $episodeDownloadPlayButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
 $episodeDownloadPlayButton.Text = " Download and play in VLC "
 $episodeDownloadPlayButton.FlatStyle = 'Flat'
 $episodeDownloadPlayButton.FlatAppearance.BorderSize = 1
 $episodeDownloadPlayButton.FlatAppearance.BorderColor = "#222222"
-$episodeDownloadPlayButton.BackColor = $bColor
-$episodeDownloadPlayButton.ForeColor = $fColor
+$episodeDownloadPlayButton.BackColor = $episodeDownloadPlayButtonBackColor
+$episodeDownloadPlayButton.ForeColor = $episodeDownloadPlayButtonForeColor
 $episodeDownloadPlayButton.AutoSize = $true
 $episodeDownloadPlayButton.Add_Click({
         param($s, $e)
@@ -359,14 +420,16 @@ $episodeDownloadPlayButton.Add_Click({
         }
     })
 
+$episodeDownloadButtonBackColor = "#323232"
+$episodeDownloadButtonForeColor = "#bebebe"
 $episodeDownloadButton = New-Object System.Windows.Forms.Button
 $episodeDownloadButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
 $episodeDownloadButton.Text = " Download "
 $episodeDownloadButton.FlatStyle = 'Flat'
 $episodeDownloadButton.FlatAppearance.BorderSize = 1
 $episodeDownloadButton.FlatAppearance.BorderColor = "#222222"
-$episodeDownloadButton.BackColor = $bColor
-$episodeDownloadButton.ForeColor = $fColor
+$episodeDownloadButton.BackColor = $episodeDownloadButtonBackColor
+$episodeDownloadButton.ForeColor = $episodeDownloadButtonForeColor
 $episodeDownloadButton.AutoSize = $true
 $episodeDownloadButton.Add_Click({
         param($s, $e)
@@ -381,14 +444,16 @@ $episodeDownloadButton.Add_Click({
         }
     })
 
+$episodeRevealInFileExplorerButtonBackColor = "#323232"
+$episodeRevealInFileExplorerButtonForeColor = "#bebebe"
 $episodeRevealInFileExplorerButton = New-Object System.Windows.Forms.Button
 $episodeRevealInFileExplorerButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
 $episodeRevealInFileExplorerButton.Text = " Reveal in File Explorer "
 $episodeRevealInFileExplorerButton.FlatStyle = 'Flat'
 $episodeRevealInFileExplorerButton.FlatAppearance.BorderSize = 1
 $episodeRevealInFileExplorerButton.FlatAppearance.BorderColor = "#222222"
-$episodeRevealInFileExplorerButton.BackColor = $bColor
-$episodeRevealInFileExplorerButton.ForeColor = $fColor
+$episodeRevealInFileExplorerButton.BackColor = $episodeRevealInFileExplorerButtonBackColor
+$episodeRevealInFileExplorerButton.ForeColor = $episodeRevealInFileExplorerButtonForeColor
 $episodeRevealInFileExplorerButton.AutoSize = $true
 $episodeRevealInFileExplorerButton.Add_Click({
         param($s, $e)
@@ -422,11 +487,14 @@ $playButtonsPanel.Size = New-Object Drawing.Size @(250, 37)
 [void] $playButtonsPanel.Controls.Add($episodeRevealInFileExplorerButton)
 
 
+$playbackRateFasterButtonBackColor = $menuButtonBColor
+$playbackRateFasterButtonForeColor = $menuButtonFColor
 $playbackRateFasterButton = New-Object System.Windows.Forms.Button
 $playbackRateFasterButton.Text = "+"
 $playbackRateFasterButton.FlatStyle = 'Flat'
 $playbackRateFasterButton.FlatAppearance.BorderSize = 0
-$playbackRateFasterButton.BackColor = "#3e3e3e"
+$playbackRateFasterButton.BackColor = $playbackRateFasterButtonBackColor
+$playbackRateFasterButton.ForeColor = $playbackRateFasterButtonForeColor
 $playbackRateFasterButton.AutoSize = $true
 $playbackRateFasterButton.Margin = 0
 $playbackRateFasterButton.Padding = 0
@@ -444,11 +512,14 @@ $playbackRateFasterButton.Add_Click({
         $playbackRateLabelValue.Text = "$( "{0:0.00}" -f ($playbackRateSlider.Value / $playbackRateSliderDenomintator))"
     })
 
+$playbackRateSlowerButtonBackColor = $menuButtonBColor
+$playbackRateSlowerButtonForeColor = $menuButtonFColor
 $playbackRateSlowerButton = New-Object System.Windows.Forms.Button
 $playbackRateSlowerButton.Text = "-"
 $playbackRateSlowerButton.FlatStyle = 'Flat'
 $playbackRateSlowerButton.FlatAppearance.BorderSize = 0
-$playbackRateSlowerButton.BackColor = "#3e3e3e"
+$playbackRateSlowerButton.BackColor = $playbackRateSlowerButtonBackColor
+$playbackRateSlowerButton.ForeColor = $playbackRateSlowerButtonForeColor
 $playbackRateSlowerButton.AutoSize = $true
 $playbackRateSlowerButton.Margin = 0
 $playbackRateSlowerButton.Padding = 0
@@ -539,10 +610,11 @@ $sliderPanel.Dock = 'Bottom'
 $sliderPanel.BackColor = "#1d1d1d"
 $sliderPanel.Size = New-Object Drawing.Size @(250, $playbackRateSlider.Height)
 [void] $sliderPanel.Controls.Add($playbackRateLabel)
+[void] $sliderPanel.Controls.Add($playbackRateSlowerButton)
 [void] $sliderPanel.Controls.Add($playbackRateLabelValue)
 [void] $sliderPanel.Controls.Add($playbackRateSlider)
 [void] $sliderPanel.Controls.Add($playbackRateFasterButton)
-[void] $sliderPanel.Controls.Add($playbackRateSlowerButton)
+
 
 $split = New-Object System.Windows.Forms.SplitContainer
 $split.Location = New-Object System.Drawing.Point(0, 0);
@@ -565,11 +637,11 @@ $splitEpisodes.SplitterWidth = 3
 $splitEpisodes.Location = New-Object System.Drawing.Point(0, 0);
 $splitEpisodes.Size = New-Object System.Drawing.Size(500, 500);
 
-$splitEpisodes.Panel1.Controls.Add($episodesListView)
+$splitEpisodes.Panel1.Controls.Add($episodeInfo)
 $splitEpisodes.Panel1.Name = "Episodes List View"
 $episodesListView.TabIndex = 3
 
-$splitEpisodes.Panel2.Controls.Add($episodeInfo)
+$splitEpisodes.Panel2.Controls.Add($episodesListView)
 $splitEpisodes.Panel2.Controls.Add($playButtonsPanel)
 $splitEpisodes.Panel2.Controls.Add($sliderPanel)
 

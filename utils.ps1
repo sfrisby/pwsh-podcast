@@ -194,7 +194,7 @@ function Update-Episodes {
         if ( $hoursSinceLastWritten -ge $hoursToCheckAgain -or $Force ) {
             write-host "Checking '$($Podcast.title)' for new episodes ..."
             # TODO: update only those different to save time.
-            $episodesLatest = ConvertFrom-PodcastWebRequestContent -Request $(Invoke-WebRequest -Uri $Podcast.url)
+            $episodesLatest = ConvertFrom-PodcastWebRequestContent -Request $(Get-Podcast-Feed -URI $Podcast.url)
             if ( $episodesLatest[0].title -ne $episodesLocal[0].title ) {
                 Write-Episodes-To-Json $episodesLatest -File $episodesFile
                 return $episodesLatest
@@ -202,10 +202,32 @@ function Update-Episodes {
         }
     }
     else {
+        # Episode file doesn't exist so create it.
         Write-Host "Selected '$($Podcast.title)'. Performing first time episode gathering ..."
-        Write-Episodes-To-Json -Episodes $(ConvertFrom-PodcastWebRequestContent -Request $(Invoke-WebRequest -Uri $Podcast.url)) -File $episodesFile
+        #
+        # TODO: FAILS (ERROR POPS UP) IF REQUEST IS 'FORBIDDEN'
+        # 
+        Write-Episodes-To-Json -Episodes $(ConvertFrom-PodcastWebRequestContent -Request $(Get-Podcast-Feed -URI $Podcast.url)) -File $episodesFile
     }
     $(Get-Podcast-Episode-List -File $episodesFile)
+}
+
+function Get-Podcast-Feed {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $URI,
+        [Parameter] 
+        [switch] $Force
+    )
+    <#
+    
+    # catch [System.Net.Http.HttpRequestException] {
+    # TODO: would be best to Convert System.Net.Http.HttpResponseMessage (via exception) to Microsoft.PowerShell.Commands.WebResponseObject (for XML)
+    #       but unable to find a viable solution to do so.
+    # $request = @{ 'Content' = $($_.Exception.Response.Content | ConvertTo-Html) | Join-String }
+    
+    #>
+    $(Invoke-WebRequest -Uri $URI -Method Get -ContentType "application/json")
 }
 
 # Writing console output for episodes, specifically: index | episode-title | publication date
