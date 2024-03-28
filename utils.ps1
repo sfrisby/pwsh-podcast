@@ -1,5 +1,7 @@
 
 . ".\test\ConvertFrom-PodcastWebRequestContent\ConvertFrom-PodcastWebRequestContent.ps1"
+. ".\test\Get-EpisodeFileContent\Get-EpisodeFileContent.ps1"
+. ".\test\Get-EpisodesLatest\Get-EpisodesLatest.ps1"
 
 function Write-Host-Welcome {
     param(
@@ -123,16 +125,7 @@ function Approve-String {
     $ToSanitize
 }
 
-function Get-Podcast-Episode-List {
-    param(
-        [Parameter(Mandatory = $true)]
-        [ValidateScript({ Test-Path -Path $_ -PathType Leaf })]
-        [String] $File
-    )
-    [array] $(Get-Content -Path $File | ConvertFrom-Json -AsHashtable)
-}
-
-function Get-Last-Write-Time {
+function Get-FileLastWriteTime {
     param(
         [Parameter(Mandatory = $true)]
         [ValidateScript({ Test-Path -Path $_ -PathType Leaf })]
@@ -160,73 +153,77 @@ function Write-Episodes-To-Json {
     A JSON file is used to create and store episode lists. 
 
     Check if a file already exists. If there are differences, than update the file.
-    TODO: instead of writing entire file, only update the changes.
 .NOTES
     Episodes are automatically updated if the last write time for the file has been
     longer than 12 hours.
 .EXAMPLE
     Update-Episodes -Podcast $podcast
     Generates or updates an episode list for the given $podcast.
-
-    Update-Episodes -Podcast $podcast -Force
-    Forces search for episodes and updated for the given $podcast even if the last write
-    time was less than 12 hours.
 #>
 function Update-Episodes {
     param(
         [Parameter(Mandatory = $true)]
-        [hashtable] $Podcast,
-        [Parameter]
-        [switch] $Force
+        [hashtable] $Podcast
     )
+    $all = @()
     $episodesLocal = @()
     $episodesLatest = @()
-    $hoursToCheckAgain = 12
     $podcastTitle = Approve-String -ToSanitize $Podcast.title
     $episodesFile = $setup.prefix_episode_list + "$podcastTitle.json"
     if ( Test-Path -Path "$episodesFile" -PathType Leaf ) {
-        $episodesLocal = Get-Podcast-Episode-List -File $episodesFile
+        $episodesLocal = Get-EpisodeFileContent -File $episodesFile
         if ("null" -eq $episodesLocal) {
             throw "File provided contained 'null'. Delete '$episodesFile' and try again."
         }
-        $lastWriteTimeDifference = $(Get-Date) - $(Get-Last-Write-Time -File $episodesFile)
-        $hoursSinceLastWritten = $lastWriteTimeDifference.Hours
-        if ( $hoursSinceLastWritten -ge $hoursToCheckAgain -or $Force ) {
-            write-host "Checking '$($Podcast.title)' for new episodes ..."
-            # TODO: update only those different to save time.
-            $episodesLatest = ConvertFrom-PodcastWebRequestContent -Request $(Get-Podcast-Feed -URI $Podcast.url)
-            if ( $episodesLatest[0].title -ne $episodesLocal[0].title ) {
-                Write-Episodes-To-Json $episodesLatest -File $episodesFile
-                return $episodesLatest
+        $episodesLatest = ConvertFrom-PodcastWebRequestContent -Request $(Invoke-PodcastFeed -URI $Podcast.url)
+        $compare = Compare-Object -ReferenceObject $episodesLocal -DifferenceObject $episodesLatest -Property title
+        $new = New-Object 'System.Collections.ArrayList'
+        $tmp = New-Object 'System.Collections.ArrayList'
+        $tmp.AddRange($episodesLocal)
+        for ($i = $compare.Length - 1; $i -ge 0; $i--) {
+            if ($compare[$i].SideIndicator -eq "=>") {
+                $tmp.Insert(0, $episodesLatest[$episodesLatest.title.IndexOf($compare[$i].title)] -as $tmp[0].GetType())
+                $new.Insert(0, $episodesLatest[$episodesLatest.title.IndexOf($compare[$i].title)] -as $tmp[0].GetType())
             }
+        }
+        if ( $new.Count -gt 0 ) {
+            $all = $tmp -as [array]
+            Write-Episodes-To-Json $all -File $episodesFile
+            write-host "Displaying only new episodes. Reselect the podcast to show all episodes."
+            return $new
         }
     }
     else {
-        # Episode file doesn't exist so create it.
+        <#
+        Episode file doesn't exist so create it.
+    
+        NOTE: When request is 'FORBIDDEN' an error dialogue is displayed. Due to the response
+        object being converted to C# and funnelled through the exception, for now the 'simplest' 
+        approach appears to be to filter erreroneous podcast feeds within create-update script. 
+        #>
         Write-Host "Selected '$($Podcast.title)'. Performing first time episode gathering ..."
-        #
-        # TODO: FAILS (ERROR POPS UP) IF REQUEST IS 'FORBIDDEN'
-        # 
-        Write-Episodes-To-Json -Episodes $(ConvertFrom-PodcastWebRequestContent -Request $(Get-Podcast-Feed -URI $Podcast.url)) -File $episodesFile
+        Write-Episodes-To-Json -Episodes $(ConvertFrom-PodcastWebRequestContent -Request $(Invoke-PodcastFeed -URI $Podcast.url)) -File $episodesFile
     }
-    $(Get-Podcast-Episode-List -File $episodesFile)
+    $(Get-EpisodeFileContent -File $episodesFile)
 }
 
-function Get-Podcast-Feed {
+
+<#
+.SYNOPSIS 
+Perform a web request for the provided URI.
+
+.NOTES
+Attempted 'catch [System.Net.Http.HttpRequestException] {' but was unreliable.
+
+Would be best to Convert System.Net.Http.HttpResponseMessage (via exception) to 
+Microsoft.PowerShell.Commands.WebResponseObject (for XML) but unable to find a 
+viable solution. If necessary, wrap method call within custom try-catch block.
+#>
+function Invoke-PodcastFeed {
     param(
         [Parameter(Mandatory = $true)]
-        [string] $URI,
-        [Parameter] 
-        [switch] $Force
+        [string] $URI
     )
-    <#
-    
-    # catch [System.Net.Http.HttpRequestException] {
-    # TODO: would be best to Convert System.Net.Http.HttpResponseMessage (via exception) to Microsoft.PowerShell.Commands.WebResponseObject (for XML)
-    #       but unable to find a viable solution to do so.
-    # $request = @{ 'Content' = $($_.Exception.Response.Content | ConvertTo-Html) | Join-String }
-    
-    #>
     $(Invoke-WebRequest -Uri $URI -Method Get -ContentType "application/json")
 }
 
@@ -254,8 +251,7 @@ function Write-Episodes {
     }
 }
 
-<# TODO: This just downloads a file at the specified URI - better to rename as it is unclear anything is written #>
-function Get-Episode {
+function Invoke-EpisodeDownload {
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline)]
         [string]$URI,

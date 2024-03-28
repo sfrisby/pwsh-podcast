@@ -51,12 +51,8 @@ while ($isActive) {
                                                 Write-Host "Podcast $($feed.title) already exists. Choose a different podcast."
                                             } 
                                             else {
-                                                <#
-                                                TODO: would be best to Convert System.Net.Http.HttpResponseMessage (via exception) to Microsoft.PowerShell.Commands.WebResponseObject (for XML) but unable to find a viable solution to do so ... for now checking catch [System.Net.Http.HttpRequestException] {
-                                                $request = @{ 'Content' = $($_.Exception.Response.Content | ConvertTo-Html) | Join-String }
-                                                #>
                                                 try {
-                                                    Get-Podcast-Feed -URI $feed.url
+                                                    Invoke-PodcastFeed -URI $feed.url
                                                     $feeds += @( $feed )
                                                     $feeds | ConvertTo-Json | Out-File $FEEDS_FILE
                                                     write-host "Added $($feed.title) by $($feed.author) to podcast feeds."
@@ -120,7 +116,7 @@ while ($isActive) {
                 try {
                     $feeds = [array]$(Get-Content -Path $FEEDS_FILE -Raw | ConvertFrom-Json -AsHashtable)
                     displayPodcastsFeeds -Podcasts $feeds -ErrorAction Stop
-                    $choice = Read-Host " Provide the # from above for the podcast to remove" # TODO multiple podcasts or single
+                    $choice = Read-Host " Provide the number (#) above for the podcast to remove"
                     switch ($choice) {
                         "q" {
                             Write-Host "Returning to previous menu."

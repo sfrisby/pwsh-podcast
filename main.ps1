@@ -41,7 +41,7 @@ else {
     $file = join-path (Get-location) "${title}.mp3"
     if ( !(Test-Path -PathType Leaf -Path $file) ) {
         $url = $episode.enclosure.url
-        Get-Episode -URI $url -Path $file
+        Invoke-EpisodeDownload -URI $url -Path $file
     }
     # Updating Tag Information
     .\working-with-tags.ps1 $episode $file
