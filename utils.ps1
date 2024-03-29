@@ -1,9 +1,8 @@
-
-. ".\test\ConvertFrom-PodcastWebRequestContent\ConvertFrom-PodcastWebRequestContent.ps1"
-. ".\test\Get-EpisodeFileContent\Get-EpisodeFileContent.ps1"
-. ".\test\Get-EpisodesLatest\Get-EpisodesLatest.ps1"
-
-function Write-Host-Welcome {
+<#
+.SYNOPSIS
+Write a CLI centered message.
+#>
+function Write-HostWelcome {
     param(
         # Parameter help description.
         [Parameter(Mandatory = $true)]
@@ -86,7 +85,7 @@ function displayPodcastsFeeds {
     $titlePadding = $($($($Podcasts) | ForEach-Object { $_.title.length }) | Measure-Object -Maximum).Maximum + $extraPadding
     $authorPadding = $($($($Podcasts) | ForEach-Object { $_.author.length }) | Measure-Object -Maximum).Maximum + $extraPadding
     $urlPadding = $($($($Podcasts) | ForEach-Object { $_.url.length }) | Measure-Object -Maximum).Maximum + $extraPadding
-    $indexPadding = $Podcasts.Count.ToString().Length
+    $padIndex = $Podcasts.Count.ToString().Length
     $origBgColor = $host.UI.RawUI.ForegroundColor
     $r = "  "
     $rw = "_" * $($r.Length)
@@ -94,14 +93,14 @@ function displayPodcastsFeeds {
         if ( $Podcasts.indexof($_) % 2) {
             # Alternating for visual cue.
             $host.UI.RawUI.ForegroundColor = 'DarkGreen'
-            $([string]$Podcasts.indexof($_)).padleft($indexPadding) +
+            $([string]$Podcasts.indexof($_)).padleft($padIndex) +
             " " + $([string]$_.title).PadLeft($titlePadding) +
             " " + $([string]$_.author).PadLeft($authorPadding) +
             " " + $([string]$_.url).PadLeft($urlPadding)
         }
         else {
             $host.UI.RawUI.ForegroundColor = $origBgColor
-            $([string]$Podcasts.indexof($_)).padleft($indexPadding) +
+            $([string]$Podcasts.indexof($_)).padleft($padIndex) +
             " " + $([string]$_.title).PadLeft($titlePadding).Replace($r, $rw) +
             " " + $([string]$_.author).PadLeft($authorPadding).Replace($r, $rw) +
             " " + $([string]$_.url).PadLeft($urlPadding).Replace($r, $rw)
@@ -160,81 +159,15 @@ function Write-EpisodesFile {
     Update-Episodes -Podcast $podcast
     Generates or updates an episode list for the given $podcast.
 #>
-function Update-Episodes {
-    param(
-        [Parameter(Mandatory = $true)]
-        [hashtable] $Podcast
-    )
-    $episodesToReturn = @()
-    $all = @()
-    $episodesLocal = @()
-    $podcastTitle = Approve-String -ToSanitize $Podcast.title
-    $episodesFile = $setup.prefix_episode_list + "$podcastTitle.json"
-
-    # Performance hit. TODO: perform in background at startup
-    $episodesLatest = ConvertFrom-PodcastWebRequestContent -Request $(Invoke-PodcastFeed -URI $Podcast.url)
-    
-    if ( Test-Path -Path "$episodesFile" -PathType Leaf ) {
-        $episodesLocal = Get-EpisodeFileContent -File $episodesFile
-        $episodesToReturn = $episodesLocal
-        if ("null" -eq $episodesLocal) {
-            throw "File provided contained 'null'. Delete '$episodesFile' and try again."
-        }
-        $compare = Compare-Object -ReferenceObject $episodesLocal -DifferenceObject $episodesLatest -Property title
-        $new = New-Object 'System.Collections.ArrayList'
-        $tmp = New-Object 'System.Collections.ArrayList'
-        $tmp.AddRange($episodesLocal)
-        for ($i = $compare.Length - 1; $i -ge 0; $i--) {
-            if ($compare[$i].SideIndicator -eq "=>") {
-                $tmp.Insert(0, $episodesLatest[$episodesLatest.title.IndexOf($compare[$i].title)] -as $tmp[0].GetType())
-                $new.Insert(0, $episodesLatest[$episodesLatest.title.IndexOf($compare[$i].title)] -as $tmp[0].GetType())
-            }
-        }
-        if ( $new.Count -gt 0 ) {
-            $all = $tmp -as [array]
-            Write-EpisodesFile $all -File $episodesFile
-            $isSingleEpisode = $new.GetType() -eq [System.Management.Automation.OrderedHashtable]
-            Write-Information "Found $( $isSingleEpisode ? "one" : "$($new.Count)" ) new episode$( $isSingleEpisode ? " " : "s ") for $($podcastTitle)"
-            $episodesToReturn = $new
-        }
-    }
-    else {
-        <#
-        Episode file doesn't exist so create it.
-    
-        NOTE: When request is 'FORBIDDEN' an error dialogue is displayed. Due to the response
-        object being converted to C# and funnelled through the exception, for now the 'simplest' 
-        approach appears to be to filter erreroneous podcast feeds within create-update script. 
-        #>
-        Write-Host "Selected '$($Podcast.title)'. Performing first time episode gathering ..."
-        Write-EpisodesFile -Episodes $episodesLatest -File $episodesFile
-        $episodesToReturn = $(Get-EpisodeFileContent -File $episodesFile)
-    }
-    $episodesToReturn
-}
-
-
-<#
-.SYNOPSIS 
-Perform a web request for the provided URI.
-
-.NOTES
-Attempted 'catch [System.Net.Http.HttpRequestException] {' but was unreliable.
-
-Would be best to Convert System.Net.Http.HttpResponseMessage (via exception) to 
-Microsoft.PowerShell.Commands.WebResponseObject (for XML) but unable to find a 
-viable solution. If necessary, wrap method call within custom try-catch block.
-#>
-function Invoke-PodcastFeed {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string] $URI
-    )
-    $(Invoke-WebRequest -Uri $URI -Method Get -ContentType "application/json")
-}
 
 # Writing console output for episodes, specifically: index | episode-title | publication date
-function Write-Episodes {
+<#
+.SYNOPSIS
+CLI method to display episodes for selection.
+.PARAMETER Amount
+The number of episodes to display. Default is 10. Providing 0 will list all episodes.
+#>
+function Write-HostEpisodesList {
     param(
         # Array containing hashtables of episode entries.
         [Parameter(Mandatory = $true)]
@@ -247,13 +180,15 @@ function Write-Episodes {
     if ($Amount -eq 0) {
         $Amount = $Episodes.Count
     }
-    $eTitlePadding = $($($Episodes.title | Select-Object -First $Amount) | ForEach-Object { $_.length } | Measure-Object -Maximum).Maximum + $Padding
-    $ePubDatePadding = $($($Episodes.pubDate | Select-Object -First $Amount) | ForEach-Object { $_.length } | Measure-Object -Maximum).Maximum + $Padding
-    $indexPadding = $Episodes.Count.ToString().Length
+    $padTitle = $($($Episodes.title | Select-Object -First $Amount) | ForEach-Object { $_.length } | Measure-Object -Maximum).Maximum + $Padding
+    $padDate = $($($Episodes.pubDate | Select-Object -First $Amount) | ForEach-Object { $_.length } | Measure-Object -Maximum).Maximum + $Padding
+    $padIndex = $Episodes.Count.ToString().Length
+    $padDuration = $($($Episodes.duration | Select-Object -First $Amount) | ForEach-Object { $_.length } | Measure-Object -Maximum).Maximum + $Padding
     $Episodes | Select-Object -First $Amount | ForEach-Object {
-        $($Episodes.indexof($_)).tostring().padleft($indexPadding) + 
-        " | " + $($_.title).padleft($eTitlePadding) +
-        " | " + $($_.pubDate.Values).padleft($ePubDatePadding) | Out-Host
+        $($Episodes.indexof($_)).tostring().padleft($padIndex) + 
+        " | " + $($_.title).padleft($padTitle) +
+        " | " + $($_.duration ? $_.duration : "n/a").padleft($padDuration) +
+        " | " + $($_.pubDate).padleft($padDate) | Out-Host
     }
 }
 

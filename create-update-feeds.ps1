@@ -9,7 +9,7 @@ function write-host-choices() {
 }
 
 $isActive = $true
-Write-Host-Welcome -Message " Podcast Manager "
+Write-HostWelcome -Message " Podcast Manager "
 write-host-choices
 while ($isActive) {
     $choice = Read-Host "Provide an action (above)"
@@ -30,13 +30,13 @@ while ($isActive) {
                         Write-Host "Searching for '$choice' podcasts ..."
                         $search = $(Invoke-CastosPodcastSearch -Podcast $choice)
                         if ($search -ne "No feeds found.") {
-                            $search | ConvertTo-Json | Out-File -FilePath $SEARCH_FILE
+                            $search | ConvertTo-Json | Out-File -FilePath $script:SEARCH_FILE 
                             # Write-Host "The following podcasts were found:"
                             # displayPodcasts -Podcast $search
                             $isAdding = $true
                             while ($isAdding) {
                                 try {
-                                    $search = [array]$(Get-Content -Path $SEARCH_FILE -Raw | ConvertFrom-Json -AsHashtable)
+                                    $search = [array]$(Get-Content -Path $script:SEARCH_FILE  -Raw | ConvertFrom-Json -AsHashtable)
                                     displayPodcastsFeeds -Podcasts $search -ErrorAction Stop
                                     $choice = Read-Host "Provide the podcast # (above) to add it or 'q' to enter a new search"
                                     switch ($choice) {
@@ -46,7 +46,7 @@ while ($isActive) {
                                         }
                                         Default {
                                             $feed = @($search[[int]$choice])
-                                            $feeds = [array]$(Get-Content -Path $FEEDS_FILE -Raw | ConvertFrom-Json -AsHashtable)
+                                            $feeds = [array]$(Get-Content -Path $script:FEEDS_FILE  -Raw | ConvertFrom-Json -AsHashtable)
                                             if ($feeds.title -contains $feed.title -and $feeds.author -contains $feed.author) {
                                                 Write-Host "Podcast $($feed.title) already exists. Choose a different podcast."
                                             } 
@@ -54,7 +54,7 @@ while ($isActive) {
                                                 try {
                                                     Invoke-PodcastFeed -URI $feed.url
                                                     $feeds += @( $feed )
-                                                    $feeds | ConvertTo-Json | Out-File $FEEDS_FILE
+                                                    $feeds | ConvertTo-Json | Out-File $script:FEEDS_FILE 
                                                     write-host "Added $($feed.title) by $($feed.author) to podcast feeds."
                                                     $isAdding = $false
                                                 }
@@ -81,10 +81,10 @@ while ($isActive) {
         }
         "l" {
             try {
-                $feeds = [array]$(Get-Content -Path $FEEDS_FILE -Raw | ConvertFrom-Json -AsHashtable)
-                Write-Host-Welcome -Message " Podcasts List " -delimiter " "
+                $feeds = [array]$(Get-Content -Path $script:FEEDS_FILE  -Raw | ConvertFrom-Json -AsHashtable)
+                Write-HostWelcome -Message " Podcasts List " -delimiter " "
                 displayPodcastsFeeds -Podcasts $feeds
-                Write-Host-Welcome -Message " End of Podcast List " -delimiter " "
+                Write-HostWelcome -Message " End of Podcast List " -delimiter " "
             }
             catch [System.Management.Automation.ParameterBindingException] {
                 Write-Debug "Invalid podcasts detected. Attempting to repair."
@@ -98,11 +98,11 @@ while ($isActive) {
                         $invalidCount++
                     }
                 }
-                $feedsToKeep | ConvertTo-Json | Out-File $FEEDS_FILE
+                $feedsToKeep | ConvertTo-Json | Out-File $script:FEEDS_FILE 
                 Write-Debug "Removed $invalidCount podcast(s)."
-                Write-Host-Welcome -Message " Podcasts List "
+                Write-HostWelcome -Message " Podcasts List "
                 displayPodcastsFeeds -Podcasts $feedsToKeep
-                Write-Host-Welcome -Message " End of Podcast List "
+                Write-HostWelcome -Message " End of Podcast List "
             }
             catch {
                 Write-Debug $_
@@ -114,7 +114,7 @@ while ($isActive) {
             $isRemoving = $true
             while ($isRemoving) {
                 try {
-                    $feeds = [array]$(Get-Content -Path $FEEDS_FILE -Raw | ConvertFrom-Json -AsHashtable)
+                    $feeds = [array]$(Get-Content -Path $script:FEEDS_FILE  -Raw | ConvertFrom-Json -AsHashtable)
                     displayPodcastsFeeds -Podcasts $feeds -ErrorAction Stop
                     $choice = Read-Host " Provide the number (#) above for the podcast to remove"
                     switch ($choice) {
@@ -130,7 +130,7 @@ while ($isActive) {
                                     $feedsToKeep += $feeds[$i]
                                 }
                             }
-                            $feedsToKeep | ConvertTo-Json | Out-File $FEEDS_FILE
+                            $feedsToKeep | ConvertTo-Json | Out-File $script:FEEDS_FILE 
                             write-host "Removed $($feeds[$index].title) by $($feeds[$index].author) from podcast feeds."
                             $isRemoving = $false
                         }

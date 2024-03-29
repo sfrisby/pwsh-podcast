@@ -1,11 +1,13 @@
 <#
 .SYNOPSIS
-GUI script for podcasts. 
+Simple GUI for podcast episode browsing.
 
 .DESCRIPTION
-Pulls feeds from 'feeds.json'. 
+All setup information is performed within the 'include.ps1' script. This includes $script:podcasts and $script:episodes variables along with the Windows Forms framework as well as an initial episode gathering (in parallel to increase performance).
 
-Once a feed is selected, its respective episodes are saved and listed. 
+$script:podcast is populated from the podcast feeds file while $script:episodes contains the latest episode information organized by podcast title.
+
+Once a Podcast feed is selected, its respective episodes are listed. 
 
 An episode may be played by selecting it and then clicking on the desired play button.
 
@@ -25,13 +27,9 @@ Thanks given to the following:
 
 #>
 
-Add-Type -assembly System.Windows.Forms
+. '.\include.ps1'
 
-. '.\include.ps1' # .\utils.ps1
-
-$script:podcasts = [array]$(Get-Content -Path $FEEDS_FILE -Raw | ConvertFrom-Json -AsHashtable);
-$script:episodes = @()
-$script:episode = @{}
+# $script:episodes."$($script:episodes.Keys[0])"
 
 $screen = [System.Windows.Forms.Screen]::AllScreens
 $script:screenWidth = $screen[0].Bounds.Size.Width
@@ -142,7 +140,8 @@ $menu.Add_MouseUp({
         param($s, $e)
         $script:mouseDown = $false
     })
-
+$podcastsListBoxWidth = 270
+$podcastsListBoxHeight = 40
 $podcastsListBoxBackColor = $menuButtonBColor
 $podcastsListBoxForeColor = "#1A0B00"
 $podcastsListBoxBackColorSelected = "#003253"
@@ -159,33 +158,51 @@ $podcastsListBox.BorderStyle = 'None'
 $podcastsListBox.DrawMode = 'OwnerDrawVariable' # Requires handling MeasureItem and DrawItem.
 $podcastsListBox.Add_MeasureItem({
         param($s, $e)
-        $e.ItemHeight = 40
-        $e.ItemWidth = 150
+        $e.ItemHeight = $podcastsListBoxHeight
+        $e.ItemWidth = $podcastsListBoxWidth
     })
+# TODO slow - what would better approach for loading images be?
 if ( $script:podcasts.Count -eq 0 ) {
-    [void] $podcastsListBox.Items.Add("No Podcasts Found. Update Feeds (feeds.json).")
+    [void] $podcastsListBox.Items.Add("No Podcasts Found. Follow instructions found in the README.")
 }
 else {
+    
+    $picHeightLocationStart = 0
     Foreach ($podcast in $script:podcasts) {
-        [void] $podcastsListBox.Items.Add($podcast.title)
+        
+        if ($null -ne $podcast.image) {
+
+            # Setting thumbnail location to the right side of the labels.
+            $pic = New-Object System.Windows.Forms.PictureBox
+            $pic.Width = $podcastsListBoxHeight
+            $pic.Height = $podcastsListBoxHeight
+            $pic.SizeMode = 'Zoom'
+            $pic.ImageLocation = $podcast.image
+            $pic.Location = New-Object System.Drawing.Point($podcastsListBoxWidth, $picHeightLocationStart)
+            $picHeightLocationStart += $podcastsListBoxHeight
+
+            [void] $podcastsListBox.Controls.Add($pic)
+            [void] $podcastsListBox.Items.Add($podcast.title)
+
+        }
+        else {
+            [void] $podcastsListBox.Items.Add($podcast.title)
+        }
+
     }
 }
 $podcastsListBox.Add_DrawItem({
         param([Object]$s, [System.Windows.Forms.DrawItemEventArgs]$e)
-        # PODCAST LIST UPDATE
-        $txt = ""
+        $podcastName = ""
         if ($e.Index -ge 0) {
-            $txt = $podcastsListBox.GetItemText($podcastsListBox.Items[$e.Index])
-        }
-        else {
-            $e.Handled = $true
+            $podcastName = $podcastsListBox.GetItemText($podcastsListBox.Items[$e.Index])
         }
         if (($e.State -band [System.Windows.Forms.DrawItemState]::Selected) -eq [System.Windows.Forms.DrawItemState]::Selected) {
             $font = New-Object System.Drawing.Font("Arial", 10, [Drawing.FontStyle]::Bold)
             $bgBrush = [system.drawing.SolidBrush]::new($podcastsListBoxBackColorSelected)
             try { 
                 $e.Graphics.FillRectangle($bgBrush, $e.Bounds)
-                [system.windows.forms.TextRenderer]::DrawText($e.Graphics, $txt, $font,
+                [system.windows.forms.TextRenderer]::DrawText($e.Graphics, $podcastName, $font,
                     $e.Bounds, $podcastsListBoxForeColorSelected, $podcastsListBoxBackColorSelected, 
                         ([System.Windows.Forms.TextFormatFlags]::Left -bor [System.Windows.Forms.TextFormatFlags]::VerticalCenter))
             }
@@ -198,7 +215,7 @@ $podcastsListBox.Add_DrawItem({
             $font = New-Object System.Drawing.Font("Arial", 10, [Drawing.FontStyle]::Regular)
             try { 
                 $e.Graphics.FillRectangle($bgBrush, $e.Bounds)
-                [system.windows.forms.TextRenderer]::DrawText($e.Graphics, $txt, $font,
+                [system.windows.forms.TextRenderer]::DrawText($e.Graphics, $podcastName, $font,
                     $e.Bounds, $podcastsListBoxForeColor, $podcastsListBoxBackColor, 
                         ([System.Windows.Forms.TextFormatFlags]::Left -bor [System.Windows.Forms.TextFormatFlags]::VerticalCenter))
             }
@@ -236,17 +253,50 @@ $episodeInfoDefaultDocumentText = ($episodeInfoSytle + `
         "<p>If podcasts aren't listed, run the setup.ps1 script followed by the create-update-feeds.ps1 script. " + `
         "</p>")
 $podcastsListBox.Add_SelectedIndexChanged({
-        param($s, $e)
+        param($sysObj, $err)
+
+        $episodesListView.Clear()
         $episodeInfo.DocumentText = $episodeInfoDefaultDocumentText
-        $episodesListView.Clear() # Removes all headers & items.
-        $podcast = $script:podcasts[$script:podcasts.title.IndexOf($s.Text)]
-        $script:episodes = Update-Episodes -Podcast $podcast
-        [void]$episodesListView.Columns.Add("Episode", 350)
-        [void]$episodesListView.Columns.Add("Date", 150)
-        Foreach ($episode in $script:episodes) {
+        
+        $p = $script:podcasts[$script:podcasts.title.IndexOf($sysObj.Text)]
+        $e = $script:episodes."$($sysObj.Text)"
+
+        $check = CompareEpisodes -Podcast $p -Episodes $e
+        if ($check -ne 0) {
+            $e = $check
+        }
+
+        [void]$episodesListView.Columns.Add("Episode", 300)
+        [void]$episodesListView.Columns.Add("Length", 100)
+        [void]$episodesListView.Columns.Add("Date", 100)
+
+        Foreach ($episode in $e) {
             $item = New-Object system.Windows.Forms.ListViewItem
-            $item.Text = $episode.title # Column 1
-            $item.SubItems.Add($episode.pubDate) # column 2
+            
+            # column 1 - episode title
+            if ($null -eq $episode.title) {
+                $item.Text = "n/a"
+            }
+            else {
+                $item.Text = $episode.title 
+            }
+
+            # column 2 - length HH:MM:SS
+            if ($null -eq $episode.duration) {
+                $item.SubItems.Add("n/a") 
+            }
+            else {
+                $item.SubItems.Add($episode.duration)
+            }
+
+            # column 3 - date
+            if ($null -eq $episode.pubDate) {
+                $item.SubItems.Add("n/a") 
+            }
+            else {
+                $item.SubItems.Add($episode.pubDate) 
+            }
+            
             $episodesListView.Items.Add($item)
         }
     })
@@ -297,48 +347,33 @@ $episodeAllLatestButtonToolTip = New-Object System.Windows.Forms.ToolTip
 $episodeAllLatestButtonToolTip.SetToolTip($episodeAllLatestButton, "List the latest episodes for all podcasts")
 $episodeAllLatestButton.Add_Click({
         param($s, $e)
-
-        $label = New-Object System.Windows.Forms.Label
-        $label.Text = "Scanning episodes of all podcasts. Please wait."
-        $label.Dock = 'Bottom'
-        $label.AutoSize = $true
-        $progress = New-Object System.Windows.Forms.ProgressBar
-        $progress.Style = 'Continuous'
-        $progress.MarqueeAnimationSpeed = 25
-        $progress.Dock = 'Top'
-        $progress.AutoSize = $true
-        $progress.Minimum = 0
-        $progress.Maximum = 100
-        $progress.Value = 0
-        $progress.Step = [Math]::floor($progress.Maximum / $script:podcasts.Count)
-        $modal = New-Object System.Windows.Forms.Form
-        $modal.FormBorderStyle = 'None'
-        $modal.StartPosition = "CenterScreen"
-        $modal.size = New-Object System.Drawing.Size($screenWidth50p, $screenHeight5p)
-        $modal.BackColor = "#232323"
-        $modal.ForeColor = "#aeaeae"
-        $modal.Controls.Add($progress)
-        $modal.Controls.Add($label)
-        
-        try {
-            $modal.Show()
-            $form.Hide()
-            $episodeInfo.DocumentText = $episodeInfoDefaultDocumentText
-            $podcastsListBox.ClearSelected()
-            $episodesListView.Clear() # Removes all headers & items.
-            $script:episodes = Get-EpisodesLatest -Podcasts $script:podcasts -Progress $progress
-            [void]$episodesListView.Columns.Add("Episode", 350)
-            [void]$episodesListView.Columns.Add("Date", 150)
-            Foreach ($episode in $script:episodes) {
+        $episodeInfo.DocumentText = $episodeInfoDefaultDocumentText
+        $podcastsListBox.ClearSelected()
+        $episodesListView.Clear() # Removes all headers & items.
+        [void]$episodesListView.Columns.Add("Podcast", 100)
+        [void]$episodesListView.Columns.Add("Episode", 300)
+        [void]$episodesListView.Columns.Add("Length", 60)
+        [void]$episodesListView.Columns.Add("Date", 80)
+    
+        foreach ($e in $script:episodes) {
+            $tables = $e."$($e.Keys[0])" | select-object -first 5
+            foreach ($table in $tables) {
                 $item = New-Object system.Windows.Forms.ListViewItem
-                $item.Text = $episode.title # Column 1
-                $item.SubItems.Add($episode.pubDate) # column 2
+
+                # column 1 - Podcast title
+                $item.Text = $( $e.Keys[0] )
+
+                # column 2 - Episode title
+                $item.SubItems.Add($null -ne $table.title ? $table.title : "n/a")
+
+                # column 3 - Length of episode
+                $item.SubItems.Add($null -ne $table.duration ? $table.duration : "n/a")
+
+                # column 4 - date
+                $item.SubItems.Add( $null -ne $table.pubDate ? $table.pubDate : "n/a" )
+
                 $episodesListView.Items.Add($item)
             }
-        } finally {
-            $modal.Close()
-            $modal.Dispose()
-            $form.Show()
         }
     })
 
@@ -364,11 +399,26 @@ $episodesListView.FullRowSelect = $true
 $episodesListView.MultiSelect = $false
 $episodesListView.Add_SelectedIndexChanged({
         param($s, $e)
-        if ($script:episodes.gettype() -eq [System.Management.Automation.OrderedHashtable]) {
-            $script:episode = $script:episodes
-        } else {
-            $script:episode = $script:episodes[$script:episodes.title.indexof($s.SelectedItems.text)]      
+        
+        # Do nothing when the event fires due to de-selecting previous
+        if ($null -eq $s.SelectedItems -or $null -eq $s.SelectedItems.Text) {
+            return
         }
+
+        # Get the podcast and episode name.
+        $podcastName = ""
+        $episodeName = ""
+        if ($podcastsListBox.SelectedIndex -eq -1) { 
+            $podcastName = $s.SelectedItems.SubItems[0].Text
+            $episodeName = $s.SelectedItems.SubItems[1].Text
+        }
+        else {
+            $podcastName = $podcastsListBox.SelectedItem
+            $episodeName = $s.selectedItems.Text
+        }
+
+        # Obtain the specific episode information and display it.
+        $script:episode = $script:episodes."$podcastName" | Where-Object { $_.title -eq $episodeName }
         $info = "<h1>$($script:episode.title)</h1>" + `
         $(($script:episode.author) ? "<h2>$($script:episode.author)</h2>" : "" ) + `
             "<p><a href='$($script:episode.enclosure.url)'>Navigate to Episode URL</a></p>"
@@ -397,7 +447,8 @@ $episodePlayButton.AutoSize = $true
 $episodePlayButton.Add_Click({
         param($s, $e)
         if ($episodesListView.SelectedItems.Count -ne 0) {
-            Write-Host "Requested to stream '$($episodesListView.SelectedItems.Text)' ..."
+            Write-Host "Requested to stream '$($script:episode.title)' ..."
+
             $url = $script:episode.enclosure.url
             if ( -1 -ne (get-process).ProcessName.indexof('vlc')) {
                 Stop-Process -Name 'vlc'
@@ -424,7 +475,7 @@ $episodeDownloadPlayButton.AutoSize = $true
 $episodeDownloadPlayButton.Add_Click({
         param($s, $e)
         if ($episodesListView.SelectedItems.Count -ne 0) {
-            Write-Host "Requested to download and play '$($episodesListView.SelectedItems.Text)' ..."
+            Write-Host "Requested to download and play '$($script:episode.title)' ..."
             $title = Approve-String -ToSanitize $script:episode.title
             $file = join-path (Get-location) "${title}.mp3"
             if ($file.Contains('Microsoft.PowerShell.Core\FileSystem::')) {
@@ -437,6 +488,9 @@ $episodeDownloadPlayButton.Add_Click({
             if ( -1 -ne (get-process).ProcessName.indexof('vlc')) {
                 Stop-Process -Name 'vlc'
             }
+
+            .\test\UpdateTags\UpdateTags.ps1 $script:episode $file
+
             # --qt-start-minimized `
             & "C:\Program Files\VideoLAN\VLC\vlc.exe" `
                 --play-and-exit `
@@ -459,7 +513,7 @@ $episodeDownloadButton.AutoSize = $true
 $episodeDownloadButton.Add_Click({
         param($s, $e)
         if ($episodesListView.SelectedItems.Count -ne 0) {
-            Write-Host "Requested to download '$($episodesListView.SelectedItems.Text)' ..."
+            Write-Host "Requested to download '$($script:episode.title)' ..."
             $title = Approve-String -ToSanitize $script:episode.title
             $file = join-path (Get-location) "${title}.mp3"
             if ( !(Test-Path -PathType Leaf -Path $file) ) {
@@ -510,7 +564,6 @@ $playButtonsPanel.Size = New-Object Drawing.Size @(250, 37)
 [void] $playButtonsPanel.Controls.Add($episodeDownloadPlayButton)
 [void] $playButtonsPanel.Controls.Add($episodeDownloadButton)
 [void] $playButtonsPanel.Controls.Add($episodeRevealInFileExplorerButton)
-
 
 $playbackRateFasterButtonBackColor = $menuButtonBColor
 $playbackRateFasterButtonForeColor = $menuButtonFColor
@@ -647,7 +700,10 @@ $split.Dock = 'Fill'
 $split.BackColor = "#222222" # Color of the vertical bar.
 $split.TabIndex = 0
 $split.SplitterWidth = 9
-
+$split.SplitterDistance = 52
+$split.Add_SplitterMoved({
+        $podcastsListBox.Invalidate()
+    })
 $split.Panel1.BackColor = "#323232" # Behind the podcast list.
 $split.Panel1.Name = "Podcasts"
 $split.Panel1.Controls.Add($podcastsGroup)

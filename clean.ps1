@@ -21,8 +21,6 @@ param(
     [string] $JSON
 )
 
-. '.\include.ps1'
-
 if ($MP3) {
     $(Get-ChildItem -Filter "*.mp3") | ForEach-Object {
         Remove-Item -Force $_
@@ -35,8 +33,9 @@ switch ($JSON) {
             Remove-Item $_ -Confirm
         }
     }
+    # TODO: don't perform episode gathering during clean
     "Episodes" {
-        $(Get-ChildItem -Filter "$EPISODE_PREFIX*.json" ) | ForEach-Object {
+        $(Get-ChildItem -Filter "$script:EPISODE_PREFIX*.json" ) | ForEach-Object {
             Remove-Item $_ -Confirm
         }
     }
