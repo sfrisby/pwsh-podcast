@@ -364,7 +364,11 @@ $episodesListView.FullRowSelect = $true
 $episodesListView.MultiSelect = $false
 $episodesListView.Add_SelectedIndexChanged({
         param($s, $e)
-        $script:episode = $script:episodes[$script:episodes.title.indexof($s.SelectedItems.text)]      
+        if ($script:episodes.gettype() -eq [System.Management.Automation.OrderedHashtable]) {
+            $script:episode = $script:episodes
+        } else {
+            $script:episode = $script:episodes[$script:episodes.title.indexof($s.SelectedItems.text)]      
+        }
         $info = "<h1>$($script:episode.title)</h1>" + `
         $(($script:episode.author) ? "<h2>$($script:episode.author)</h2>" : "" ) + `
             "<p><a href='$($script:episode.enclosure.url)'>Navigate to Episode URL</a></p>"

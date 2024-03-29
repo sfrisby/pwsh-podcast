@@ -134,7 +134,7 @@ function Get-FileLastWriteTime {
     $(Get-ChildItem -Path $File | Select-Object -Property LastWriteTime).LastWriteTime
 }
 
-function Write-Episodes-To-Json {
+function Write-EpisodesFile {
     param(
         [Parameter(Mandatory = $true)]
         [array] $Episodes,
@@ -165,17 +165,21 @@ function Update-Episodes {
         [Parameter(Mandatory = $true)]
         [hashtable] $Podcast
     )
+    $episodesToReturn = @()
     $all = @()
     $episodesLocal = @()
-    $episodesLatest = @()
     $podcastTitle = Approve-String -ToSanitize $Podcast.title
     $episodesFile = $setup.prefix_episode_list + "$podcastTitle.json"
+
+    # Performance hit. TODO: perform in background at startup
+    $episodesLatest = ConvertFrom-PodcastWebRequestContent -Request $(Invoke-PodcastFeed -URI $Podcast.url)
+    
     if ( Test-Path -Path "$episodesFile" -PathType Leaf ) {
         $episodesLocal = Get-EpisodeFileContent -File $episodesFile
+        $episodesToReturn = $episodesLocal
         if ("null" -eq $episodesLocal) {
             throw "File provided contained 'null'. Delete '$episodesFile' and try again."
         }
-        $episodesLatest = ConvertFrom-PodcastWebRequestContent -Request $(Invoke-PodcastFeed -URI $Podcast.url)
         $compare = Compare-Object -ReferenceObject $episodesLocal -DifferenceObject $episodesLatest -Property title
         $new = New-Object 'System.Collections.ArrayList'
         $tmp = New-Object 'System.Collections.ArrayList'
@@ -188,9 +192,10 @@ function Update-Episodes {
         }
         if ( $new.Count -gt 0 ) {
             $all = $tmp -as [array]
-            Write-Episodes-To-Json $all -File $episodesFile
-            write-host "Displaying only new episodes. Reselect the podcast to show all episodes."
-            return $new
+            Write-EpisodesFile $all -File $episodesFile
+            $isSingleEpisode = $new.GetType() -eq [System.Management.Automation.OrderedHashtable]
+            Write-Information "Found $( $isSingleEpisode ? "one" : "$($new.Count)" ) new episode$( $isSingleEpisode ? " " : "s ") for $($podcastTitle)"
+            $episodesToReturn = $new
         }
     }
     else {
@@ -202,9 +207,10 @@ function Update-Episodes {
         approach appears to be to filter erreroneous podcast feeds within create-update script. 
         #>
         Write-Host "Selected '$($Podcast.title)'. Performing first time episode gathering ..."
-        Write-Episodes-To-Json -Episodes $(ConvertFrom-PodcastWebRequestContent -Request $(Invoke-PodcastFeed -URI $Podcast.url)) -File $episodesFile
+        Write-EpisodesFile -Episodes $episodesLatest -File $episodesFile
+        $episodesToReturn = $(Get-EpisodeFileContent -File $episodesFile)
     }
-    $(Get-EpisodeFileContent -File $episodesFile)
+    $episodesToReturn
 }
 
 
