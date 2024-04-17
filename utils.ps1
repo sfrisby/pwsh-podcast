@@ -192,7 +192,7 @@ function Write-HostEpisodesList {
     }
 }
 
-function Invoke-EpisodeDownload {
+function Invoke-Download {
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline)]
         [string]$URI,

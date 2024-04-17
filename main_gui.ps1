@@ -27,14 +27,11 @@ Thanks given to the following:
 
 #>
 
-. '.\include.ps1'
-
-# $script:episodes."$($script:episodes.Keys[0])"
+. '.\fetch.ps1'
 
 $screen = [System.Windows.Forms.Screen]::AllScreens
 $script:screenWidth = $screen[0].Bounds.Size.Width
 $script:screenHeight = $screen[0].Bounds.Size.Height
-$screenHeight5p = [int]($script:screenHeight / 20)
 $screenHeight25p = [int]($script:screenHeight / 4)
 $screenHeight50p = [int]($screenHeight25p + $screenHeight25p)
 $screenHeight75p = [int]($screenHeight25p + $screenHeight50p)
@@ -46,6 +43,7 @@ $form.Size = New-Object System.Drawing.Size($screenWidth50p, $screenHeight75p)
 $form.BackColor = "#232323"
 $form.ForeColor = "#aeaeae"
 $form.Text = "Podcasts"
+$form.Icon = [System.Drawing.Icon]::FromHandle([System.Drawing.Bitmap]::FromStream([System.IO.MemoryStream]::new($([System.IO.File]::ReadAllBytes(".\resource\p.ico")))).GetHicon())
 
 $guiWidth50p = [int]($form.Size.Width / 2)
 $menuButtonBColor = "#007FD3"
@@ -161,36 +159,6 @@ $podcastsListBox.Add_MeasureItem({
         $e.ItemHeight = $podcastsListBoxHeight
         $e.ItemWidth = $podcastsListBoxWidth
     })
-# TODO slow - what would better approach for loading images be?
-if ( $script:podcasts.Count -eq 0 ) {
-    [void] $podcastsListBox.Items.Add("No Podcasts Found. Follow instructions found in the README.")
-}
-else {
-    
-    $picHeightLocationStart = 0
-    Foreach ($podcast in $script:podcasts) {
-        
-        if ($null -ne $podcast.image) {
-
-            # Setting thumbnail location to the right side of the labels.
-            $pic = New-Object System.Windows.Forms.PictureBox
-            $pic.Width = $podcastsListBoxHeight
-            $pic.Height = $podcastsListBoxHeight
-            $pic.SizeMode = 'Zoom'
-            $pic.ImageLocation = $podcast.image
-            $pic.Location = New-Object System.Drawing.Point($podcastsListBoxWidth, $picHeightLocationStart)
-            $picHeightLocationStart += $podcastsListBoxHeight
-
-            [void] $podcastsListBox.Controls.Add($pic)
-            [void] $podcastsListBox.Items.Add($podcast.title)
-
-        }
-        else {
-            [void] $podcastsListBox.Items.Add($podcast.title)
-        }
-
-    }
-}
 $podcastsListBox.Add_DrawItem({
         param([Object]$s, [System.Windows.Forms.DrawItemEventArgs]$e)
         $podcastName = ""
@@ -224,6 +192,37 @@ $podcastsListBox.Add_DrawItem({
             }
         }
     })
+# Setting thumbnail location to the right side of the labels.
+if ( $script:podcasts.Count -eq 0 ) {
+    [void] $podcastsListBox.Items.Add("No Podcasts Found. Follow instructions found in the README.")
+}
+else {
+    $picHeightLocationStart = 0
+    Foreach ($podcast in $script:podcasts) {
+        # Display the podcast image.
+        if ($null -ne $podcast.image) {
+            # Existance performed in fetch thread.
+            $name = Approve-String -ToSanitize $podcast.title
+            $path = ".\resource\thumb_$name.jpg"
+            $pic = New-Object System.Windows.Forms.PictureBox
+            $pic.Location = New-Object System.Drawing.Point($podcastsListBoxWidth, $picHeightLocationStart)
+            $pic.Width = $podcastsListBoxHeight
+            $pic.Height = $podcastsListBoxHeight
+            $pic.SizeMode = 'Zoom'
+            $pic.Image = [System.Drawing.Image]::FromFile($path)
+            
+            [void] $podcastsListBox.Controls.Add($pic)
+            [void] $podcastsListBox.Items.Add($podcast.title)
+
+            $picHeightLocationStart += $podcastsListBoxHeight
+        }
+        # Display only the podcast title.
+        else {
+            [void] $podcastsListBox.Items.Add($podcast.title)
+        }
+    }
+}
+
 $episodeInfoSytle = @"
 <style>
     body {
@@ -243,12 +242,13 @@ $episodeInfoSytle = @"
     }
 </style>
 "@
+$episodeAllLatestButtonText = "List the Latest Episodes for All Podcasts"
 $episodeInfoDefaultDocumentText = ($episodeInfoSytle + `
         "<p>First, select a podcast (left) then select an episode from the generated list (below). The first time a podcast is " + `
         "selected, all episodes will be listed. After that, if any new episodes are found then they will be the only episodes listed. " + `
         "To see all episodes again, click the '$episodesForSelectedPodcastButtonText' button or re-click on the podcast title. " + `
         "</p> " + `
-        "<p>Alternatively, click `"$episodeAllLatestButtonText`" button to list the latest three episodes from all podcasts." + `
+        "<p>Alternatively, click `"$episodeAllLatestButtonText`" button to list the latest episodes from all podcasts." + `
         "</p>" + `
         "<p>If podcasts aren't listed, run the setup.ps1 script followed by the create-update-feeds.ps1 script. " + `
         "</p>")
@@ -329,13 +329,13 @@ $episodesForSelectedPodcastButton.Add_Click({
         else {
             $b = [System.Windows.Forms.MessageBoxButtons]::OK
             $i = [System.Windows.Forms.MessageBoxIcon]::Information
-            $m = "Select a podcast (left) in order to check for new episodes."
+            $m = "A podcast must be selected in order to check for new episodes."
             $t = “No Podcast Selected”
             [System.Windows.Forms.MessageBox]::Show($m, $t, $b, $i)
         }
     })
 
-$episodeAllLatestButtonText = "List the Latest Episodes for All Podcasts"
+
 $episodeAllLatestButton = New-Object System.Windows.Forms.Button
 $episodeAllLatestButton.Margin = 0
 $episodeAllLatestButton.Padding = 0
@@ -493,7 +493,7 @@ $episodeDownloadPlayButton.Add_Click({
             }
             if ( !(Test-Path -PathType Leaf -Path $file) ) {
                 $url = $script:episode.enclosure.url
-                Invoke-EpisodeDownload -URI $url -Path $file
+                Invoke-Download -URI $url -Path $file
             }
             if ( -1 -ne (get-process).ProcessName.indexof('vlc')) {
                 Stop-Process -Name 'vlc'
@@ -528,7 +528,7 @@ $episodeDownloadButton.Add_Click({
             $file = join-path (Get-location) "${title}.mp3"
             if ( !(Test-Path -PathType Leaf -Path $file) ) {
                 $url = $script:episode.enclosure.url
-                Invoke-EpisodeDownload -URI $url -Path $file
+                Invoke-Download -URI $url -Path $file
             }
         }
     })

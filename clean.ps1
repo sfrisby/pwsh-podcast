@@ -16,10 +16,14 @@ Removes all JSON files. Will likely have to rerun setup hence a confirmation is 
 param(
     [Parameter(Mandatory = $false)] # Specify to delete all MP3 files.
     [switch] $MP3,
-    [Parameter(Mandatory = $false)] # Specify to delete all JSON files.
+    [Parameter(Mandatory = $false)] # Specify to delete all or just the episode JSON files.
     [ValidateSet("All", "Episodes")]
-    [string] $JSON
+    [string] $JSON,
+    [Parameter(Mandatory = $false)] # Specify to delete all Thumbnail resource files.
+    [switch] $Thumbnails
 )
+
+. '.\include.ps1'
 
 if ($MP3) {
     $(Get-ChildItem -Filter "*.mp3") | ForEach-Object {
@@ -33,11 +37,16 @@ switch ($JSON) {
             Remove-Item $_ -Confirm
         }
     }
-    # TODO: don't perform episode gathering during clean
     "Episodes" {
         $(Get-ChildItem -Filter "$script:EPISODE_PREFIX*.json" ) | ForEach-Object {
             Remove-Item $_ -Confirm
         }
     }
     Default {}
+}
+
+if ($Thumbnails) {
+    $(Get-ChildItem -Path '.\resource' -Filter "thumb_*.jpg") | ForEach-Object {
+        Remove-Item -Force $_
+    }
 }

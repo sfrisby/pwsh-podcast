@@ -13,7 +13,7 @@ param(
     [Single] $Rate = 1.5
 )
 
-. '.\include.ps1'
+. '.\fetch.ps1'
 
 # Display podcasts from feed file and let user choose.
 $feeds = [array]$(Get-Content -Path $script:FEEDS_FILE -Raw | ConvertFrom-Json -AsHashtable)
@@ -41,7 +41,6 @@ catch [System.FormatException] {
 }
 
 # Streaming does not always work. Unable to identify VLC error. For now the default is download then stream.
-# TODO allow options: --qt-start-minimized --play-and-exit
 if ($ToStream) {
     & "C:\Program Files\VideoLAN\VLC\vlc.exe" --play-and-exit --rate=$Rate $($selected.enclosure.url)
 }
@@ -51,7 +50,7 @@ else {
     $file = join-path (Get-location) "${title}.mp3"
     if ( !(Test-Path -PathType Leaf -Path $file) ) {
         $url = $selected.enclosure.url
-        Invoke-EpisodeDownload -URI $url -Path $file
+        Invoke-Download -URI $url -Path $file
     }
     # Updating Tag Information
     .\test\UpdateTags\UpdateTags.ps1 $selected $file
