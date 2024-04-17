@@ -255,6 +255,11 @@ $episodeInfoDefaultDocumentText = ($episodeInfoSytle + `
 $podcastsListBox.Add_SelectedIndexChanged({
         param($sysObj, $err)
 
+        # Ignore de-selection of podcasts.
+        if ($podcastsListBox.SelectedIndex -eq -1) {
+            return
+        }
+
         $episodesListView.Clear()
         $episodeInfo.DocumentText = $episodeInfoDefaultDocumentText
         
@@ -347,8 +352,13 @@ $episodeAllLatestButtonToolTip = New-Object System.Windows.Forms.ToolTip
 $episodeAllLatestButtonToolTip.SetToolTip($episodeAllLatestButton, "List the latest episodes for all podcasts")
 $episodeAllLatestButton.Add_Click({
         param($s, $e)
+
+        # ClearSelected only when something is selected!
+        if ($podcastsListBox.SelectedIndex -ne -1) {
+            $podcastsListBox.ClearSelected()
+        }
+
         $episodeInfo.DocumentText = $episodeInfoDefaultDocumentText
-        $podcastsListBox.ClearSelected()
         $episodesListView.Clear() # Removes all headers & items.
         [void]$episodesListView.Columns.Add("Podcast", 100)
         [void]$episodesListView.Columns.Add("Episode", 300)
