@@ -15,7 +15,8 @@ function CompareEpisodes {
         [parameter(Mandatory = $true)]
         [hashtable] $Podcast,
         [parameter(Mandatory = $true)]
-        [array] $Episodes
+        [array] $Episodes,
+        [switch] $UpdateEpisodeFile
     )
     
     $local = @()
@@ -25,7 +26,7 @@ function CompareEpisodes {
         $local = Get-EpisodeFileContent -File $file
     }
     else {
-        # Save baseline episodes as the new podcast episode file.
+        # Save baseline episodes as the new podcast episode file
         Write-EpisodesFile -Episodes $Episodes -File $file
         return 0
     }
@@ -42,9 +43,11 @@ function CompareEpisodes {
         }
     }
 
-    # Update local episode file to contain all episodes and only return the new.
-    if ( $new.Count -gt 0 ) {
-        Write-EpisodesFile -Episodes $($all -as [array]) -File $file
+    # Update local episode file (IFF specified) to contain all episodes and only return the new.
+    if ( $new.Count -gt 0) {
+        if ($UpdateEpisodeFile) {
+            Write-EpisodesFile -Episodes $($all -as [array]) -File $file
+        }
         $isSingleEpisode = $new.GetType() -eq [System.Management.Automation.OrderedHashtable]
         Write-Host "Found $( $isSingleEpisode ? "one" : "$($new.Count)" ) new episode$( $isSingleEpisode ? " " : "s ")for $($Podcast.title)"
         return $($new -as [array])

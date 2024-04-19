@@ -15,29 +15,56 @@ param(
 
 . '.\fetch.ps1'
 
-# Display podcasts from feed file and let user choose.
+# Obtaining all feeds
 $feeds = [array]$(Get-Content -Path $script:FEEDS_FILE -Raw | ConvertFrom-Json -AsHashtable)
-displayPodcastsFeeds -Podcasts $feeds
-$choice = Read-Host "Select # (above) of the podcast to listen to"
-$podcast = $feeds[[int]$choice]
 
-# Display the episodes and let user choose.
-$e = $script:episodes."$($podcast.title)"
-
-$check = CompareEpisodes -Podcast $podcast -Episodes $e
-if ($check -ne 0) {
-    $e = $check
-}
-
-Write-HostEpisodesList -Episodes $e
-$choice = Read-Host -prompt "Select episode by # (above)"
 $selected = @()
-try {
-    $selected = $e[[int]::Parse($choice)]
-    Write-Host "Episode selected was: '$($selected.title)'."
+if ($feeds) {
+
+    # Display latest episodes or continue to podcast selection
+    $found = @()
+    foreach ($podcast in $feeds) {
+        $check = CompareEpisodes -Podcast $podcast -Episodes $script:episodes.$($podcast.title) -UpdateEpisodeFile
+        if ($check) {
+            foreach ($item in $check) {
+                $found += @{ $podcast.title = $item }
+            }
+        }
+    }
+    if ($found.Count) {    
+        Write-HostCLIEpisodes -Episodes $found
+        $choice = Read-Host -prompt "Select episode by # (above)"
+        try {
+            $selected = $found[[int]$choice]
+            Write-Host "Episode selected was: '$($selected.$($selected.Keys[0]).title)' from '$($selected.Keys[0])'."
+            $selected = $selected.$($selected.Keys[0])
+        }
+        catch [System.FormatException] {
+            throw "A number was not provided. Unable to proceede."
+        } catch {
+            Write-Host "An exception occured while parsing the episode selected."
+            throw $_
+        }
+    }
+    else {
+        # Display podcasts from feed file and let user choose.
+        Write-HostCLIPodcastFeeds -Podcasts $feeds
+        $choice = Read-Host "Select # (above) of the podcast to listen to"
+        $podcast = $feeds[[int]$choice]
+        # Display the episodes and let user choose.
+        $e = $script:episodes."$($podcast.title)"
+        $choice = Read-Host -prompt "Select episode by # (above)"
+        try {
+            $selected = $e[[int]::Parse($choice)]
+            Write-Host "Episode selected was: '$($selected.title)'."
+        }
+        catch [System.FormatException] {
+            throw "A number was not provided. Unable to proceede."
+        }
+    }
 }
-catch [System.FormatException] {
-    throw "A number was not provided. Unable to proceede."
+else {
+    Throw "No podcast feeds were found."
 }
 
 # Streaming does not always work. Unable to identify VLC error. For now the default is download then stream.

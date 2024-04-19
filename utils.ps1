@@ -73,9 +73,9 @@ function Invoke-CastosPodcastSearch {
 
 <#
 .DESCRIPTION
-Calculating console padding to display for the podcasts found.
+Calculating console padding to display for the provided podcasts for simple indexing.
 #>
-function displayPodcastsFeeds {
+function Write-HostCLIPodcastFeeds {
     param(
         [Parameter(Mandatory = $true)]
         [ValidateScript( { $($null -ne $_) -and $($_.count -ne 0) })]
@@ -109,6 +109,47 @@ function displayPodcastsFeeds {
     $host.UI.RawUI.ForegroundColor = $origBgColor
 }
 
+<#
+.SYNOPSIS
+Calculating console padding for all episodes as found in the array of hashtables for simple indexing.
+#>
+function Write-HostCLIEpisodes {
+    param (
+        [Parameter(Mandatory = $true)]
+        [array] $Episodes
+    )
+    $extraPadding = 3
+    $podcastPadding = $($($($Episodes) | ForEach-Object { $_.Keys[0].length }) | Measure-Object -Maximum).Maximum + $extraPadding
+    $titlePadding = $($($($Episodes) | ForEach-Object { $_.$($_.Keys[0]).title.length }) | Measure-Object -Maximum).Maximum + $extraPadding
+    $durationPadding = $($($($Episodes) | ForEach-Object { $_.$($_.Keys[0]).duration.length }) | Measure-Object -Maximum).Maximum + $extraPadding
+    $datePadding = $($($($Episodes) | ForEach-Object { $_.$($_.Keys[0]).pubDate.length }) | Measure-Object -Maximum).Maximum + $extraPadding
+    $padIndex = $Episodes.Count.ToString().Length
+    $origBgColor = $host.UI.RawUI.ForegroundColor
+    $r = "  "
+    $rw = "_" * $($r.Length)
+    $color = 0
+    foreach ($e in $Episodes) {
+        if ($color % 2) {
+            $host.UI.RawUI.ForegroundColor = 'DarkBlue'
+            ([string]$($Episodes.IndexOf($e))).padleft($padIndex) +
+            " " + ([string]$($e.Keys[0])).padleft($podcastPadding).Replace($r, $rw) +
+            " " + ([string]$($e.$($e.Keys[0]).title)).PadLeft($titlePadding).Replace($r, $rw) +
+            " " + ([string]$($e.$($e.Keys[0]).duration)).PadLeft($durationPadding).Replace($r, $rw) +
+            " " + ([string]$($e.$($e.Keys[0]).pubDate)).PadLeft($datePadding).Replace($r, $rw)
+        }
+        else {
+            $host.UI.RawUI.ForegroundColor = $origBgColor
+                ([string]$($Episodes.IndexOf($e))).padleft($padIndex) +
+            " " + ([string]$($e.Keys[0])).padleft($podcastPadding).Replace($r, $rw) +
+            " " + ([string]$($e.$($e.Keys[0]).title)).PadLeft($titlePadding).Replace($r, $rw) +
+            " " + ([string]$($e.$($e.Keys[0]).duration)).PadLeft($durationPadding).Replace($r, $rw) +
+            " " + ([string]$($e.$($e.Keys[0]).pubDate)).PadLeft($datePadding).Replace($r, $rw)
+        }
+        $color = $color + 1
+    }
+    $host.UI.RawUI.ForegroundColor = $origBgColor
+}
+
 function Approve-String {
     param (
         [Parameter(Mandatory = $true, ValueFromPipeline)]
@@ -117,7 +158,7 @@ function Approve-String {
     [System.IO.Path]::GetInvalidFileNameChars() | ForEach-Object { 
         $tmp = $ToSanitize.replace("$_", "")
         if ($tmp.Length -lt $ToSanitize.Length) {
-            Write-Host "Invalid character '${_}' found; removing ..."
+            Write-Information "Invalid character '${_}' found; removing ..."
             $ToSanitize = $tmp
         }
     }

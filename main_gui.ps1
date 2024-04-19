@@ -242,14 +242,13 @@ $episodeInfoSytle = @"
     }
 </style>
 "@
-$episodeAllLatestButtonText = "List the Latest Episodes for All Podcasts"
+$episodesForSelectedPodcastButtonText = "Show All Episodes for Selected Podcast"
 $episodeInfoDefaultDocumentText = ($episodeInfoSytle + `
-        "<p>First, select a podcast (left) then select an episode from the generated list (below). The first time a podcast is " + `
-        "selected, all episodes will be listed. After that, if any new episodes are found then they will be the only episodes listed. " + `
-        "To see all episodes again, click the '$episodesForSelectedPodcastButtonText' button or re-click on the podcast title. " + `
+        "<p>By default all new episodes for all podcasts will be listed (below). This does not affect the podcast episode baseline. If no episodes are listed, " + `
+        "then select a podcast (left) to have all of its episodes listed. The very first time a podcast is " + `
+        "selected, all of its episodes will be listed. New episodes will only appear by themselfs once and only if they exist. " + `
+        "Subsequent clicks for the same podcast will refresh its episode baseline. '$episodesForSelectedPodcastButtonText' may also be selected to show all its episodes." + `
         "</p> " + `
-        "<p>Alternatively, click `"$episodeAllLatestButtonText`" button to list the latest episodes from all podcasts." + `
-        "</p>" + `
         "<p>If podcasts aren't listed, run the setup.ps1 script followed by the create-update-feeds.ps1 script. " + `
         "</p>")
 $podcastsListBox.Add_SelectedIndexChanged({
@@ -266,8 +265,8 @@ $podcastsListBox.Add_SelectedIndexChanged({
         $p = $script:podcasts[$script:podcasts.title.IndexOf($sysObj.Text)]
         $e = $script:episodes."$($sysObj.Text)"
 
-        $check = CompareEpisodes -Podcast $p -Episodes $e
-        if ($check -ne 0) {
+        $check = CompareEpisodes -Podcast $p -Episodes $e -UpdateEpisodeFile
+        if ($check) {
             $e = $check
         }
 
@@ -277,36 +276,16 @@ $podcastsListBox.Add_SelectedIndexChanged({
 
         Foreach ($episode in $e) {
             $item = New-Object system.Windows.Forms.ListViewItem
-            
             # column 1 - episode title
-            if ($null -eq $episode.title) {
-                $item.Text = "n/a"
-            }
-            else {
-                $item.Text = $episode.title 
-            }
-
+            $item.Text = ($null -eq $episode.title) ? "n/a" : $episode.title
             # column 2 - length HH:MM:SS
-            if ($null -eq $episode.duration) {
-                $item.SubItems.Add("n/a") 
-            }
-            else {
-                $item.SubItems.Add($episode.duration)
-            }
-
+            [void] $item.SubItems.Add( ($null -eq $episode.duration) ? "n/a" : $episode.duration)
             # column 3 - date
-            if ($null -eq $episode.pubDate) {
-                $item.SubItems.Add("n/a") 
-            }
-            else {
-                $item.SubItems.Add($episode.pubDate) 
-            }
-            
-            $episodesListView.Items.Add($item)
+            [void] $item.SubItems.Add( ($null -eq $episode.pubDate) ? "n/a" : $episode.pubDate)
+            [void] $episodesListView.Items.Add($item)
         }
     })
 
-$episodesForSelectedPodcastButtonText = "Show All Episodes for Selected Podcast"
 $episodesForSelectedPodcastButton = New-Object System.Windows.Forms.Button
 $episodesForSelectedPodcastButton.Margin = 0
 $episodesForSelectedPodcastButton.Padding = 0
@@ -335,58 +314,6 @@ $episodesForSelectedPodcastButton.Add_Click({
         }
     })
 
-
-$episodeAllLatestButton = New-Object System.Windows.Forms.Button
-$episodeAllLatestButton.Margin = 0
-$episodeAllLatestButton.Padding = 0
-$episodeAllLatestButton.Dock = 'top'
-$episodeAllLatestButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left
-$episodeAllLatestButton.Text = $episodeAllLatestButtonText
-$episodeAllLatestButton.FlatStyle = 'Flat'
-$episodeAllLatestButton.FlatAppearance.BorderSize = 0
-$episodeAllLatestButton.BackColor = $menuButtonBColor
-$episodeAllLatestButton.ForeColor = $menuButtonFColor
-$episodeAllLatestButton.Font = New-Object Drawing.Font("Consolas", 8, [System.Drawing.FontStyle]::Bold)
-$episodeAllLatestButton.AutoSize = $true
-$episodeAllLatestButtonToolTip = New-Object System.Windows.Forms.ToolTip
-$episodeAllLatestButtonToolTip.SetToolTip($episodeAllLatestButton, "List the latest episodes for all podcasts")
-$episodeAllLatestButton.Add_Click({
-        param($s, $e)
-
-        # ClearSelected only when something is selected!
-        if ($podcastsListBox.SelectedIndex -ne -1) {
-            $podcastsListBox.ClearSelected()
-        }
-
-        $episodeInfo.DocumentText = $episodeInfoDefaultDocumentText
-        $episodesListView.Clear() # Removes all headers & items.
-        [void]$episodesListView.Columns.Add("Podcast", 100)
-        [void]$episodesListView.Columns.Add("Episode", 300)
-        [void]$episodesListView.Columns.Add("Length", 60)
-        [void]$episodesListView.Columns.Add("Date", 80)
-    
-        foreach ($e in $script:episodes) {
-            $tables = $e."$($e.Keys[0])" | select-object -first 5
-            foreach ($table in $tables) {
-                $item = New-Object system.Windows.Forms.ListViewItem
-
-                # column 1 - Podcast title
-                $item.Text = $( $e.Keys[0] )
-
-                # column 2 - Episode title
-                $item.SubItems.Add($null -ne $table.title ? $table.title : "n/a")
-
-                # column 3 - Length of episode
-                $item.SubItems.Add($null -ne $table.duration ? $table.duration : "n/a")
-
-                # column 4 - date
-                $item.SubItems.Add( $null -ne $table.pubDate ? $table.pubDate : "n/a" )
-
-                $episodesListView.Items.Add($item)
-            }
-        }
-    })
-
 $podcastsGroup = new-object System.Windows.Forms.GroupBox
 $podcastsGroup.Dock = 'fill'
 $podcastsGroup.FlatStyle = 'Flat'
@@ -394,7 +321,6 @@ $podcastsGroup.Padding = 10
 $podcastsGroup.Margin = 0
 [void] $podcastsGroup.Controls.Add($podcastsListBox)
 [void] $podcastsGroup.Controls.Add($episodesForSelectedPodcastButton)
-[void] $podcastsGroup.Controls.Add($episodeAllLatestButton)
 
 $episodesListViewBackColor = "#323232"
 $episodesListViewForeColor = "#bebebe"
@@ -407,38 +333,66 @@ $episodesListView.HeaderStyle = 'Nonclickable'
 $episodesListView.View = 'Details'
 $episodesListView.FullRowSelect = $true
 $episodesListView.MultiSelect = $false
+# Displaying episode information for selected episode.
 $episodesListView.Add_SelectedIndexChanged({
-        param($s, $e)
-        
-        # Do nothing when the event fires due to de-selecting previous
-        if ($null -eq $s.SelectedItems -or $null -eq $s.SelectedItems.Text) {
-            return
-        }
+    param($s, $e)
+    
+    # Do nothing when the event fires due to de-selecting previous
+    if ($null -eq $s.SelectedItems -or $null -eq $s.SelectedItems.Text) {
+        return
+    }
 
-        # Get the podcast and episode name.
-        $podcastName = ""
-        $episodeName = ""
-        if ($podcastsListBox.SelectedIndex -eq -1) { 
-            $podcastName = $s.SelectedItems.SubItems[0].Text
-            $episodeName = $s.SelectedItems.SubItems[1].Text
-        }
-        else {
-            $podcastName = $podcastsListBox.SelectedItem
-            $episodeName = $s.selectedItems.Text
-        }
+    # Get the podcast and episode name.
+    $podcastName = ""
+    $episodeName = ""
+    if ($podcastsListBox.SelectedIndex -eq -1) { 
+        $podcastName = $s.SelectedItems.SubItems[0].Text
+        $episodeName = $s.SelectedItems.SubItems[1].Text
+    }
+    else {
+        $podcastName = $podcastsListBox.SelectedItem
+        $episodeName = $s.selectedItems.Text
+    }
 
-        # Obtain the specific episode information and display it.
-        $script:episode = $script:episodes."$podcastName" | Where-Object { $_.title -eq $episodeName }
-        $info = "<h1>$($script:episode.title)</h1>" + `
-        $(($script:episode.author) ? "<h2>$($script:episode.author)</h2>" : "" ) + `
-            "<p><a href='$($script:episode.enclosure.url)'>Navigate to Episode URL</a></p>"
-        if ($script:episode.encoded) {
-            $episodeInfo.DocumentText = $episodeInfoSytle + $info + $script:episode.encoded
-        }
-        else {
-            $episodeInfo.DocumentText = $episodeInfoSytle + $info + $script:episode.description
-        }
-    })
+    # Obtain the specific episode information and display it.
+    $script:episode = $script:episodes."$podcastName" | Where-Object { $_.title -eq $episodeName }
+    $info = "<h1>$($script:episode.title)</h1>" + `
+    $(($script:episode.author) ? "<h2>$($script:episode.author)</h2>" : "" ) + `
+        "<p><a href='$($script:episode.enclosure.url)'>Navigate to Episode URL</a></p>"
+    if ($script:episode.encoded) {
+        $episodeInfo.DocumentText = $episodeInfoSytle + $info + $script:episode.encoded
+    }
+    else {
+        $episodeInfo.DocumentText = $episodeInfoSytle + $info + $script:episode.description
+    }
+})
+# Displaying 'newest' episodes for each podcast at startup.
+[void]$episodesListView.Columns.Add("Podcast", 100)
+[void]$episodesListView.Columns.Add("Episode", 300)
+[void]$episodesListView.Columns.Add("Length", 60)
+[void]$episodesListView.Columns.Add("Date", 80)
+$newEpisodes = @()
+foreach ($podcast in $script:podcasts) {
+    $check = CompareEpisodes -Podcast $podcast -Episodes $($script:episodes."$($podcast.title)")
+    if ($check) {
+        $newEpisodes += @{ $podcast.title = $check } 
+    }
+}
+foreach ($podcastKey in $newEpisodes.Keys) {
+    foreach ($table in $newEpisodes.$podcastKey) {
+        $item = New-Object system.Windows.Forms.ListViewItem
+        # column 1 - Podcast title
+        $item.Text = $podcastKey
+        # column 2 - Episode title
+        [void] $item.SubItems.Add($null -ne $table.title ? "$($table.title)" : "n/a")
+        # column 3 - Length of episode
+        [void] $item.SubItems.Add($null -ne $table.duration ? "$($table.duration)" : "n/a")
+        # column 4 - date
+        [void] $item.SubItems.Add( $null -ne $table.pubDate ? "$($table.pubDate)" : "n/a" )
+        [void] $episodesListView.Items.Add($item)
+    }
+}
+$newEpisodes = @()
 
 $episodeInfo = New-Object System.Windows.Forms.WebBrowser
 $episodeInfo.Dock = 'Fill'

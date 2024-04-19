@@ -37,7 +37,7 @@ while ($isActive) {
                             while ($isAdding) {
                                 try {
                                     $search = [array]$(Get-Content -Path $script:SEARCH_FILE  -Raw | ConvertFrom-Json -AsHashtable)
-                                    displayPodcastsFeeds -Podcasts $search -ErrorAction Stop
+                                    Write-HostCLIPodcastFeeds -Podcasts $search -ErrorAction Stop
                                     $choice = Read-Host "Provide the podcast # (above) to add it or 'q' to enter a new search"
                                     switch ($choice) {
                                         "q" {
@@ -83,7 +83,7 @@ while ($isActive) {
             try {
                 $feeds = [array]$(Get-Content -Path $script:FEEDS_FILE  -Raw | ConvertFrom-Json -AsHashtable)
                 Write-HostWelcome -Message " Podcasts List " -delimiter " "
-                displayPodcastsFeeds -Podcasts $feeds
+                Write-HostCLIPodcastFeeds -Podcasts $feeds
                 Write-HostWelcome -Message " End of Podcast List " -delimiter " "
             }
             catch [System.Management.Automation.ParameterBindingException] {
@@ -101,7 +101,7 @@ while ($isActive) {
                 $feedsToKeep | ConvertTo-Json | Out-File $script:FEEDS_FILE 
                 Write-Debug "Removed $invalidCount podcast(s)."
                 Write-HostWelcome -Message " Podcasts List "
-                displayPodcastsFeeds -Podcasts $feedsToKeep
+                Write-HostCLIPodcastFeeds -Podcasts $feedsToKeep
                 Write-HostWelcome -Message " End of Podcast List "
             }
             catch {
@@ -115,7 +115,7 @@ while ($isActive) {
             while ($isRemoving) {
                 try {
                     $feeds = [array]$(Get-Content -Path $script:FEEDS_FILE  -Raw | ConvertFrom-Json -AsHashtable)
-                    displayPodcastsFeeds -Podcasts $feeds -ErrorAction Stop
+                    Write-HostCLIPodcastFeeds -Podcasts $feeds -ErrorAction Stop
                     $choice = Read-Host " Provide the number (#) above for the podcast to remove"
                     switch ($choice) {
                         "q" {
