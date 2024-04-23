@@ -1,6 +1,5 @@
-*Thumbs.db
-thumb_*.jpg
-*.ini
+*.vscode
+*.db
+*.jpg
 *.json
 *.mp3
-vlc_log.txt
