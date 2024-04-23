@@ -1,8 +1,13 @@
 # Podcasts in PowerShell
 
-This project contains simple boilerplate for maintaining and playing podcasts through PowerShell. 
+This project contains basic boilerplate for experiencing podcasts through PowerShell.
 
-Both a console and Windows Forms GUI are provided. However, setup and podcast feed gathering is **only** performed via the console.
+Both a console and Windows Forms GUI are provided. 
+
+TODO: simplify setup - or make|use|run 'install' script.
+However, setup and podcast RSS feed gathering is **only** performed via the console.
+
+Once podcast feeds are specified using **create_update_feeds.ps1** then they may be accessed by executing the GUI or CLI.
 
 VLC (Windows 64 bit version) is used for playing media files. It expects VLC to be located at the 'default' install location, i.e: 
 > C:\Program Files\VideoLAN\VLC\vlc.exe.
@@ -16,6 +21,26 @@ Next, run the **create-update-feeds.ps1** script and follow its instructions to 
 Now you may listen to podcasts by running **main.ps1** or **main_gui.ps1**.
 
 All files created or downloaded are stored in the project folder.
+
+## Project Structure
+
+Root (Folder where **setup.ps1** was performed.)
+|
+|- main.ps1 (CLI [-CLI] or GUI [-GUI] depending on arguments provided)
+|
+|- setup.ps1 (setup script)
+|
+|- setup.ini
+|
+|- resource
+|  |
+|  |- episodes (containing found episodes for podcasts in JSON)
+|  |
+|  |- thumbnails (containing found podcast thumbnails)
+|
+|
+|
+|
 
 ## Known Issues
 

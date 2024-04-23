@@ -84,6 +84,6 @@ if ($null -eq $tags.Tag.Year -or $tags.Tag.Year -eq "") {
 try {
     $tags.Save()
 } catch {
-    Write-Host "Exception thrown while updating tags!"
+    Write-Host "Exception thrown while updating tags:"
     throw $_
 }
