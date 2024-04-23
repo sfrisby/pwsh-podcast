@@ -13,18 +13,16 @@ An episode may be played by selecting it and then clicking on the desired play b
 
 The rate of playback may also be modified PRIOR to clicking on a play button.
 
-.NOTES
-Thanks given to the following:
-    https://stackoverflow.com/questions/32014711/how-do-you-call-windows-explorer-with-a-file-selected-from-powershell
+.CREDIT&THANKS
+https://stackoverflow.com/questions/32014711/how-do-you-call-windows-explorer-with-a-file-selected-from-powershell
 
-    https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.combobox?view=windowsdesktop-8.0
-        https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.combobox.flatstyle?view=windowsdesktop-8.0#system-windows-forms-combobox-flatstyle
-        https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.combobox.drawitem?view=windowsdesktop-8.0#system-windows-forms-combobox-drawitem
+https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.combobox?view=windowsdesktop-8.0
+    https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.combobox.flatstyle?view=windowsdesktop-8.0#system-windows-forms-combobox-flatstyle
+    https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.combobox.drawitem?view=windowsdesktop-8.0#system-windows-forms-combobox-drawitem
 
-    https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.listview.ownerdraw?view=windowsdesktop-8.0&redirectedfrom=MSDN#System_Windows_Forms_ListView_OwnerDraw
+https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.listview.ownerdraw?view=windowsdesktop-8.0&redirectedfrom=MSDN#System_Windows_Forms_ListView_OwnerDraw
 
-    https://htmlcolorcodes.com/color-picker/
-
+https://htmlcolorcodes.com/color-picker/
 #>
 
 . '.\fetch.ps1'
@@ -242,12 +240,9 @@ $episodeInfoSytle = @"
     }
 </style>
 "@
-$episodesForSelectedPodcastButtonText = "Show All Episodes for Selected Podcast"
 $episodeInfoDefaultDocumentText = ($episodeInfoSytle + `
-        "<p>By default all new episodes for all podcasts will be listed (below). This does not affect the podcast episode baseline. If no episodes are listed, " + `
-        "then select a podcast (left) to have all of its episodes listed. The very first time a podcast is " + `
-        "selected, all of its episodes will be listed. New episodes will only appear by themselfs once and only if they exist. " + `
-        "Subsequent clicks for the same podcast will refresh its episode baseline. '$episodesForSelectedPodcastButtonText' may also be selected to show all its episodes." + `
+        "<p>By default all new episodes for all podcasts will be listed (below). If no episodes are listed " + `
+        "select a podcast (left) to have all of its episodes listed." + `
         "</p> " + `
         "<p>If podcasts aren't listed, run the setup.ps1 script followed by the create-update-feeds.ps1 script. " + `
         "</p>")
@@ -286,41 +281,12 @@ $podcastsListBox.Add_SelectedIndexChanged({
         }
     })
 
-$episodesForSelectedPodcastButton = New-Object System.Windows.Forms.Button
-$episodesForSelectedPodcastButton.Margin = 0
-$episodesForSelectedPodcastButton.Padding = 0
-$episodesForSelectedPodcastButton.Dock = 'top'
-$episodesForSelectedPodcastButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left
-$episodesForSelectedPodcastButton.Text = $episodesForSelectedPodcastButtonText
-$episodesForSelectedPodcastButton.FlatStyle = 'Flat'
-$episodesForSelectedPodcastButton.FlatAppearance.BorderSize = 0
-$episodesForSelectedPodcastButton.BackColor = $menuButtonBColor
-$episodesForSelectedPodcastButton.ForeColor = $menuButtonFColor
-$episodesForSelectedPodcastButton.Font = New-Object Drawing.Font("Consolas", 8, [System.Drawing.FontStyle]::Bold)
-$episodesForSelectedPodcastButton.AutoSize = $true
-$episodesForSelectedPodcastButtonToolTip = New-Object System.Windows.Forms.ToolTip
-$episodesForSelectedPodcastButtonToolTip.SetToolTip($episodesForSelectedPodcastButton, "List all episodes for the selected podcast")
-$episodesForSelectedPodcastButton.Add_Click({
-        param($s, $e)
-        if ($null -ne $podcastsListBox.SelectedItem) {
-            $podcastsListBox.SetSelected($podcastsListBox.SelectedIndex, $true)
-        }
-        else {
-            $b = [System.Windows.Forms.MessageBoxButtons]::OK
-            $i = [System.Windows.Forms.MessageBoxIcon]::Information
-            $m = "A podcast must be selected in order to check for new episodes."
-            $t = “No Podcast Selected”
-            [System.Windows.Forms.MessageBox]::Show($m, $t, $b, $i)
-        }
-    })
-
 $podcastsGroup = new-object System.Windows.Forms.GroupBox
 $podcastsGroup.Dock = 'fill'
 $podcastsGroup.FlatStyle = 'Flat'
 $podcastsGroup.Padding = 10
 $podcastsGroup.Margin = 0
 [void] $podcastsGroup.Controls.Add($podcastsListBox)
-[void] $podcastsGroup.Controls.Add($episodesForSelectedPodcastButton)
 
 $episodesListViewBackColor = "#323232"
 $episodesListViewForeColor = "#bebebe"
@@ -373,7 +339,8 @@ $episodesListView.Add_SelectedIndexChanged({
 [void]$episodesListView.Columns.Add("Date", 80)
 $newEpisodes = @()
 foreach ($podcast in $script:podcasts) {
-    $check = CompareEpisodes -Podcast $podcast -Episodes $($script:episodes."$($podcast.title)")
+    $e = $($script:episodes."$($podcast.title)")
+    $check = CompareEpisodes -Podcast $podcast -Episodes $e -UpdateEpisodeFile
     if ($check) {
         $newEpisodes += @{ $podcast.title = $check } 
     }

@@ -12,6 +12,7 @@ viable solution. If necessary, wrap method call within custom try-catch block.
 function Invoke-PodcastFeed {
     param(
         [Parameter(Mandatory = $true)]
+        [ValidateScript({ $null -ne $_ })]
         [string] $URI
     )
     $(Invoke-WebRequest -Uri $URI -Method Get -ContentType "application/json")

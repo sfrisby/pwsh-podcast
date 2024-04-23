@@ -13,8 +13,10 @@ The latest (gathered at startup) episodes for the provided podcast.
 function CompareEpisodes {
     param(
         [parameter(Mandatory = $true)]
+        [ValidateScript({ $null -ne $_ })]
         [hashtable] $Podcast,
         [parameter(Mandatory = $true)]
+        [ValidateScript({ $null -ne $_ })]
         [array] $Episodes,
         [switch] $UpdateEpisodeFile
     )

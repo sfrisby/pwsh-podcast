@@ -9,6 +9,7 @@ function ConvertFrom-PodcastWebRequestContent {
 	param
 	(
 		[Parameter(Mandatory = $true)]
+		[ValidateScript({ $null -ne $_ })]
 		[Microsoft.PowerShell.Commands.WebResponseObject] $Request
 	)
 	$episodes = @()

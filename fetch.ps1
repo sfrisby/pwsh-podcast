@@ -1,8 +1,5 @@
 . '.\include.ps1'
 
-$script:episodes = @()
-$script:podcasts = [array]$(Get-Content -Path $script:FEEDS_FILE -Raw | ConvertFrom-Json -AsHashtable);
-
 $imgJob = @()
 $jobs = @()
 foreach ($podcast in $script:podcasts) {
@@ -14,11 +11,18 @@ foreach ($podcast in $script:podcasts) {
     $execBlock = {
         param (
             [parameter(Mandatory = $true)]
+            [ValidateScript({ $null -ne $_ })]
             [string] $URI
         )
-        return $(ConvertFrom-PodcastWebRequestContent -Request $(Invoke-PodcastFeed -URI $URI))
+        $i = Invoke-PodcastFeed -URI $URI
+
+        $c = ConvertFrom-PodcastWebRequestContent -Request $i
+
+        $c
     }
-    $jobs += $( Start-ThreadJob -InitializationScript $initBlock -ScriptBlock $execBlock -ArgumentList $podcast.url -Name $podcast.title )
+    $t = $podcast.title
+    $u = $podcast.url
+    $jobs += $( Start-ThreadJob -InitializationScript $initBlock -Name $t -ScriptBlock $execBlock -ArgumentList $u )
     
     # Thumbnail gathering.
     $imgPath = ".\resource\thumb_$(Approve-String -ToSanitize $podcast.title).jpg"
@@ -55,7 +59,7 @@ foreach ($podcast in $script:podcasts) {
                 if ($resize) { $thumbnail.Dispose() }
             }
         }
-        $imgJob += $( Start-ThreadJob -InitializationScript $imgInit -ScriptBlock $imgBlock -ArgumentList $imgPath, $podcast.image -Name "image_$($podcast.title)" )
+        $imgJob += $( Start-ThreadJob -InitializationScript $imgInit -ScriptBlock $imgBlock -ArgumentList @($imgPath, $podcast.image) -Name "image_$($podcast.title)" )
     }
 }
 

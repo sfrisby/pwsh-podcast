@@ -39,3 +39,7 @@ $setup = Get-Content -Path $CONFIG_FILE_PATH -Raw | ConvertFrom-StringData
 $script:FEEDS_FILE = $setup.file_feeds
 $script:SEARCH_FILE = $setup.file_search
 $script:EPISODE_PREFIX = $setup.prefix_episode_list
+
+$script:episodes = @()
+$script:podcasts = @()
+$script:podcasts = [array]$(Get-Content -Path $script:FEEDS_FILE -Raw | ConvertFrom-Json -AsHashtable);
