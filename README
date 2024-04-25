@@ -1,47 +1,151 @@
+<!---
+
+.SYNOPSIS
+README for PowerShell Podcast project.
+
+.NOTES
+When using VSCode:
+* Preview shortcut - 'ctrl + shift + v'
+* Preview to the right shortcut - 'ctrl + k then v'
+* Within the preview any 'double-click' will navigates to MD source location.
+
+--->
+
 # Podcasts in PowerShell
 
-This project contains basic boilerplate for experiencing podcasts through PowerShell.
+This application contains basic boilerplate for processing podcast RSS information through PowerShell.
 
-Both a console and Windows Forms GUI are provided. 
+Media playback relies on the default installation location for [VLC](https://www.videolan.org/vlc/):
 
-TODO: simplify setup - or make|use|run 'install' script.
-However, setup and podcast RSS feed gathering is **only** performed via the console.
+    C:\Program Files\VideoLAN\VLC\vlc.exe.
 
-Once podcast feeds are specified using **create_update_feeds.ps1** then they may be accessed by executing the GUI or CLI.
+Access to podcasts is provided by both console commands or launching a Windows Forms GUI.
 
-VLC (Windows 64 bit version) is used for playing media files. It expects VLC to be located at the 'default' install location, i.e: 
-> C:\Program Files\VideoLAN\VLC\vlc.exe.
+It is recommended to use PowerShell 7.4 or newer.
 
 ## Getting Started
 
-From the console, run the **setup.ps1** script. This will setup configuration and JSON files for organizing and maintaining podcasts and their episodes. File names and their respective prefixes may be modified within **config.ini** - *HOWEVER* - do so with caution.
+Open PowerShell within the application directory and run the **main.ps1** script. This will automatically import the module PwShPodcasts and setup the expected folder structure used by the application.
 
-Next, run the **create-update-feeds.ps1** script and follow its instructions to add podcasts.
-
-Now you may listen to podcasts by running **main.ps1** or **main_gui.ps1**.
-
-All files created or downloaded are stored in the project folder.
-
-## Project Structure
-
-Root (Folder where **setup.ps1** was performed.)
-|
-|- main.ps1 (CLI [-CLI] or GUI [-GUI] depending on arguments provided)
-|
-|- setup.ps1 (setup script)
-|
-|- setup.ini
+The expected file structure is outlined as follows:
+```
+Root Folder (application folder; where main.ps1 exists)
 |
 |- resource
 |  |
-|  |- episodes (containing found episodes for podcasts in JSON)
+|  |- thumbnails (contains podcast thumbnails)
 |  |
-|  |- thumbnails (containing found podcast thumbnails)
-|
-|
-|
-|
+|  |- all.json (initially empty; will store all podcast episodes)
+|  |
+|   `- rss.json (initially empty; will store podcast RSS information)
+| 
+ `-- downloads (contains any downloaded podcast episodes)
+```
+
+If you encounter any errors ensure your account has the privilege to read and write files and create folders on the filesystem.
+
+### Optional download requirement
+
+If you plan to download episodes (highly recommended) then you will want to update the MP3 tags. This may be accomplished automatically using [TagLibSharp](https://www.nuget.org/packages/TagLibSharp). Ensure the **TagLibSharp.dll** exists within a folder named **bin** within your users home directory, i.e. **~/bin/TagLibSharp.dll**.
+
+When the library cannot be found the tags will not be updated. This may or may not matter to you. The resulting MP3 file name will be the episode name but services relying on metadata will likely fail.
+
+### Adding a podcast
+
+    Add-Podcast -Name "Search Term"
+
+This will return a search of all podcasts found related by "Search Term". The podcast information will be saved to a local JSON file within the project folder. If only one podcast is found by the search then it will automatically be added.
+
+### Listing all podcasts
+
+    Show-Podcasts
+
+This lists all podcasts saved locally.
+
+### Get the complete list of podcasts each contained within their own hashtable
+
+    Get-Podcasts
+
+Provides a snapshot of local podcasts at time of creation. It is useful when used with other commands.
+
+### Remove a podcast
+
+    Remove-Podcast -Name "Podcast Title"
+
+This will remove a podcast that matches "Podcast Title". 
+
+To ensure the title is found and a podcast is removed the following steps may be taken:
+
+    > Show_Podcasts
+    > $index = #
+    > Remove_Podcasts -Name $( $(Get_Podcasts)[$index].title )
+
+* Use **Show_Podcasts** to get the index number of the podcast to remove.
+* Use **Get_Podcasts** to obtain the specific podcast information using the index number.
+* Feed the title of the podcast into **Remove-Podcast**.
+
+### Getting all episode information on console
+
+The main script must be executed with the **-ReturnData** flag.
+
+    > $data = $(.\main.ps1 -ReturnData)
+
+$data will contain the keys **all** and **new**. 
+
+The key '**all**' contains all episodes.
+
+    > $data.all
+
+The key '**new**' contains episodes found online but not saved locally. When the local episode file has been updated recently and no episodes have been published online then this list will be empty.
+
+    > $data.new
+
+### Manually saving episodes
+
+Send the episode information contained in the 'all' key to Save-Episodes. Also use the Get-EpisodesFilePath function. See the previous section for obtaining the $data variable.
+
+    > Save-Episodes -Episodes $data.all -File $(Get-EpisodesFilePath)
+
+## Using the GUI
+
+To launch the GUI provide the **-GUI** flag to the **main.ps1** script.
+
+    > .\main.ps1 -GUI
+
+The initially listed episodes will be those considered to be new. If there are no new episodes then episodes published within the last week will be listed.
+
+Clicking on a podcast thumbnail will display all of its episodes.
+
+### Saving episodes with the GUI
+
+Launch the GUI and then click the **Save Episodes** button. Be patient as the more episodes there are the longer it takes.
+
+The updated episodes file will be used the next time the GUI is launched.
+
+### Considerations when using the GUI
+
+Changes made via the console while the GUI is open will likely require restarting the GUI for the changes to take effect.
+
+## Determine new episodes via comparison
+
+New episodes are determined by comparing online episodes with those saved locally. 
+
+The local episodes file may be overwritten by clicking the **Save Episodes** button within the GUI or doing so manually. Manual updating will not impact the GUI until it is relaunched.
 
 ## Known Issues
 
-The URL provided be an episode may not stream using VLC. In these cases, specify to download and then play. Downloads only occur if a local file is not found.
+### Streaming
+It is unclear why the following issues occur:
+
+* The URL stream provided fails.
+* VLC pops up quickly and then immediately closes.
+* The URL stream returns a shorter version or broken media.
+* Audio cuts in and out during playback.
+
+Downloading the episode has been found to resolve these issues.
+
+### Unknown or Unresolved Host
+This appears to occur when accessing the RSS is also being updated at the same time. Wait a couple minutes and try again.
+
+### Others
+Open an issue or leave a comment for any problems encountered.

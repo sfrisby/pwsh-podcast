@@ -7,8 +7,8 @@ Search results are based on the $Name provided.
 function Add-Podcast {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)]
-        [ValidateScript({ $_ -ne "" })]
+        [Parameter(Mandatory)]
+        [ValidateScript({ ($null -ne $_) -and ($_.count -gt 0) })]
         [String] $Name
     )    
     $search = Search-Podcasts -Name $Name
@@ -21,7 +21,7 @@ function Add-Podcast {
         Save-Podcasts -Podcasts @( $podcast )
     }
     elseif ($local.title -contains $podcast.title) {
-        Write-Host "$($podcast.title) already exists."
+        Write-Verbose "$($podcast.title) already exists."
     }
     else {
         if ($local.GetType().BaseType -ne [array]) {
@@ -30,6 +30,355 @@ function Add-Podcast {
         $local += @( $podcast )
         Save-Podcasts -Podcasts $local
     }
+}
+
+<#
+.SYNOPSIS
+Obtain the thumbnail (image) by the provided podcast.
+.DESCRIPTION
+Resizes the thumbnail to $Scale. 
+.NOTES
+System.Drawing.Bitmap.save does not override existing files.
+
+The use of Get-PodcastThumbnailFileName must be exported for visibility outside the module due to use in threads.
+#>
+function ConfirmPodcastThumbnail {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateScript({ $null -ne $_.image })]
+        [hashtable] $Podcast,
+        [Parameter()]
+        [ValidateScript({ -not [System.IO.File]::Exists($_) })]
+        [string] $File = $(Get-PodcastThumbnailFileName -Name $Podcast.title),
+        [Parameter()]
+        [ValidateRange(100, 500)]
+        [Int16] $Scale = 250
+    )
+    try {
+        $tmp = Invoke-Download -URI $Podcast.image
+        $thumbnail = [System.Drawing.Image]::FromFile($tmp)
+        $resize = New-Object System.Drawing.Bitmap($Scale, $Scale)
+        $graphics = [System.Drawing.Graphics]::FromImage($resize)
+        $graphics.DrawImage($thumbnail, 0, 0, $Scale, $Scale)
+        $resize.Save($File, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+        $thumbnail.Dispose()
+        $graphics.Dispose()
+        $resize.Dispose()
+    } <# Not catching here so thread contains any errors. #>
+    finally {
+        if ($thumbnail) { $thumbnail.Dispose() }
+        if ($graphics) { $thumbnail.Dispose() }
+        if ($resize) { $thumbnail.Dispose() }
+    }
+}
+
+<#
+.SYNOPSIS
+Download and resize (if not found) all podcast thumbnails in parallel.
+.DESCRIPTION
+Because the file name isn't specified, the called method will use the default (podcast title) for file name.
+.FUNCTIONALITY
+DOES NOT CLEANUP JOBS! DO SO WHERE CALLED.
+#>
+function ConfirmAllPodcastThumbnails {
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [array] $Podcasts = @(Get-Podcasts)
+    )
+    $i = { Import-Module .\PwShPodcasts }
+    foreach ($podcast in $Podcasts) {
+        $n = "thumbnail for $($podcast.title)"
+        $block = {
+            $function:CPT = "$using:function:ConfirmPodcastThumbnail"
+            CPT -Podcast $using:variable:podcast
+        }
+        Start-ThreadJob -InitializationScript $i -ScriptBlock $block -Name $n
+    }
+}
+
+<#
+.SYNOPSIS
+Provided with lists of the oldest and latest episodes return a full list of all episodes.
+.DESCRIPTION
+A hashtable is returned containing the keys 'new' for new found episodes and 'all' for all episodes.
+Indexing is reversed to ensure the 'newest' episode is first in the list.
+.PARAMETER Oldest
+Expected to be the oldest list of episodes (local).
+.PARAMETER Latest
+Expected to be the latest list of episodes (online)
+#>
+function Compare-Episodes {
+    param(
+        [parameter(Mandatory = $true)]
+        [ValidateScript({ $null -ne $_ })]
+        [array] $Oldest,
+        [parameter(Mandatory = $true)]
+        [ValidateScript({ $null -ne $_ })]
+        [array] $Latest
+    )
+    $compare = Compare-Object -ReferenceObject $Oldest -DifferenceObject $Latest -Property title
+    $all = New-Object 'System.Collections.ArrayList'
+    $all.AddRange($Oldest) # Storing all of the oldest entries.
+    $new = New-Object 'System.Collections.ArrayList'
+    for ($i = $compare.Length - 1; $i -ge 0; $i--) {
+        if ($compare[$i].SideIndicator -eq "=>") {
+            $new.Insert(0, $Latest[$Latest.title.IndexOf($compare[$i].title)] -as $Latest[0].GetType())
+            $all.Insert(0, $Latest[$Latest.title.IndexOf($compare[$i].title)] -as $Latest[0].GetType())
+        }
+    }
+    return @{
+        new = $( $new -as [array] )
+        all = $( $all -as [array] )
+    }
+}
+
+<#
+.SYNOPSIS
+Return episodes from a specific podcast.
+.NOTES
+The break or continue statements do not behave the same way in ForEach-Object cmdlet as they do in other loops.
+
+All episodes for a specific podcast may be accomplished via (# represents the index listed by show-podcasts):
+Show-Podcasts
+$podcasts = @(get-podcasts)
+$episodes = Formate-PodcastTasks
+Get-EpisodesByPodcastTitle -Podcast $podcasts[#] -Episodes $episodes
+
+Alternative option:
+$episodes = Formate-PodcastTasks
+Show-Podcasts
+$podcasts = @(get-podcasts)
+$specific_podcast_index_episodes = $episodes | Where-Object { $_.podcast_title -eq $podcasts[#].title }
+#>
+function Get-EpisodesByPodcastTitle {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateScript({ $null -ne $_.title })]
+        [hashtable] $Podcast,
+        [Parameter(Mandatory)]
+        [array] $Episodes
+    )
+    return @( $Episodes | Where-Object { $_.podcast_title -eq $Podcast.title } )
+}
+
+<#
+.SYNOPSIS
+Return episodes contained within the provided file.
+.NOTES
+Best to encapsulate where called, i.e. @(Get-EpisodesLocal -File {})
+#>
+function Get-EpisodesLocal {
+    param(
+        [Parameter(Mandatory)]
+        [ValidateScript({ (Test-Path -Path $_ -PathType Leaf) -and ($_ -like "*.json") })]
+        [string] $File
+    )
+    [array]$(Get-Content -Path $file -Raw | ConvertFrom-Json -AsHashtable)
+}
+
+<#
+.SYNOPSIS
+Return episodes from the provided podcast.
+.DESCRIPTION
+Adds the podcast title to the key 'podcast_title'.
+.NOTES
+Best to encapsulate where called, i.e. @(Get-EpisodesOnline -Podcast {})
+
+When 'No such host is known' (SocketException, HttpRequestException) is thrown it appears to indicate that the RSS is updating.
+
+Idea for tracking 'played' - $table | ForEach-Object { $_.media_accessed_locally_count = 0 }.
+    The challenge becomes episode comparison as local will not match if played.
+#>
+function Get-EpisodesOnline {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateScript({ ( $null -ne $_.url ) -and ( $null -ne $_.title ) })]
+        [hashtable] $Podcast
+    )
+    $request = $(Invoke-PodcastFeed -URI $Podcast.url)
+    $table = $(ConvertFrom-PodcastWebRequestContent -Request $request)
+    $table | ForEach-Object { $_.podcast_title = $Podcast.title }
+
+    $table
+}
+
+<#
+.SYNOPSIS
+Return a hashtable of ALL podcasts and their respective 'latest' episodes in parrallel.
+.NOTES
+Get-EpisodesOnline must be visible in module scope for threads to operate unless changed to $using.
+.FUNCTIONALITY
+DOES NOT CLEANUP JOBS! DO SO WHERE CALLED.
+#>
+function GetAllEpisodesOnline {
+    [CmdletBinding()]
+    param (
+        [array] $Podcasts = @(Get-Podcasts)
+    )
+    $i = { Import-Module .\PwShPodcasts }
+    foreach ($podcast in $Podcasts) {
+        $block = {
+            param (
+                [parameter(Mandatory)]
+                [ValidateScript({ $null -ne $_ })]
+                [hashtable] $p
+            )
+            return @(Get-EpisodesOnline -Podcast $p)
+        }
+        $n = "episodes for $($podcast.title)"
+        Start-ThreadJob -InitializationScript $i -Name $n -ScriptBlock $block -ArgumentList $podcast
+    }
+}
+
+<#
+.SYNOPSIS
+Return episodes within the provided published date.
+.NOTES
+Idea to further simplify into a more PwSh form:
+$episodes | Select-Object -Property podcast_title, title, pubDate | Sort-Object -Property pubDate
+Updating all date fields to PwSh get-date:
+$episodes | ForEach-Object { $_.pubDate = $(Get-Date $_.pubDate) }
+Sorting descending (newest at the top):
+$sorted = $toSort | Sort-Object -Property pubDate -Descending
+#>
+function Get-EpisodesWithinDate {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [array] $Episodes,
+        [Parameter(Mandatory)]
+        [ValidateSet('Today', 'Week', 'Month', 'Year')]
+        [string] $Published
+    )
+    $hours = 0
+    switch ($Published) {
+        'Today' { $hours = 24 }
+        'Week' { $hours = 168 }
+        'Month' { $hours = 672 }
+        'Year' { $hours = 8064 }
+        Default { $hours = 168 }
+    }
+    return @($Episodes | Where-Object { $($(Get-Date) - $(Get-Date $_.pubDate)).TotalHours -le $hours })
+}
+
+<#
+.SYNOPSIS
+Performs all startup formatting podcast tasks.
+.DESCRIPTION
+This method uses subtle scope 'magic'. Refer to NOTES.
+These tasks include:
+* gathering all podcast episodes online
+* downloading and resizing thumbnails if they don't exist
+.NOTES
+Jobs are taken from the called functions to report progress.
+Their functions names cannot contain a hyphen (-) or it fails interpretation.
+It also required "$using". 
+Refer to https://stackoverflow.com/questions/68881237/powershell-start-job-scope. 
+
+Both text size of the activity and the status message change how progress is shown.
+#>
+function Format-PodcastsTasks {
+    if ( $(Get-Job).Count -ne 0 ) {
+        throw "Jobs already exist! Clear them and try again."
+    }
+    $names = @{
+        local_e    = "local_episodes_00"
+        online_e   = "online_episodes_00"
+        thumbnails = "thumbnails00"
+    }
+    $jobs = @()
+    # Initialization for all jobs. Necessary for scoping functions in default parameters.
+    $i = { Import-Module .\PwShPodcasts } 
+    <# LOCAL EPISODES JOB #>
+    $block_local_episodes = {
+        @(Get-EpisodesLocal -File $(Get-EpisodesFilePath))
+    }
+    $jobs += ( Start-ThreadJob -InitializationScript $i -ScriptBlock $block_local_episodes -Name $names.local_e )
+    <# ONLINE EPISODES JOB #>
+    # Access data with {}.keys and {}.indexof({}).
+    $block_online_episodes = {
+        $function:GAEO = "$using:function:GetAllEpisodesOnline"
+        GAEO
+    }
+    $jobs += ( Start-ThreadJob -InitializationScript $i -ScriptBlock $block_online_episodes -Name $names.online_e )
+    <# THUMBNAILS JOB #>
+    $block_thumbnails = {
+        $function:CAPT = "$using:function:ConfirmAllPodcastThumbnails"
+        CAPT
+    }
+    $jobs += ( Start-ThreadJob -InitializationScript $i -ScriptBlock $block_thumbnails -Name $names.thumbnails )
+    # Ensure child jobs are initialized and stored before continuing.
+    $local_e_job = $null
+    $online_e_jobs = $null
+    $thumbnailJobs = $null
+    while ($null -eq $local_e_job -or $null -eq $online_e_jobs -or $null -eq $thumbnailJobs) {
+        $local_e_job = $( Get-Job -Name $names.local_e ) # Don't include children when they don't exist. Wait to receive.
+        $online_e_jobs = $( Get-Job -Name $names.online_e -IncludeChildJob | Wait-Job | Receive-Job )
+        $thumbnailJobs = $( Get-Job -Name $names.thumbnails -IncludeChildJob | Wait-Job | Receive-Job )
+    }
+    # Total counts
+    $lSteps = $local_e_job.Count
+    $eSteps = $online_e_jobs.Count
+    $tSteps = $thumbnailJobs.Count
+    $allSteps = $eSteps + $tSteps
+    # Styling
+    $PSStyle.Progress.Style = "$($PSStyle.Background.BrightBlue)"
+    $PSStyle.Progress.MaxWidth = 60
+    $PSStyle.Progress.View = 'Minimal'
+    # Progress 
+    $all = "All Tasks"
+    $lAct = "Local Episode Gathering"
+    $oAct = "Online Episode Gathering"
+    $tAct = "Thumbnail Gathering"
+    while ((( $local_e_job | Where-Object { $_.State -eq 'Running' -or $_.State -eq 'NotStarted' }).Count + `
+            ( $online_e_jobs | Where-Object { $_.State -eq 'Running' -or $_.State -eq 'NotStarted' }).Count + `
+            ( $thumbnailJobs | Where-Object { $_.State -eq 'Running' -or $_.State -eq 'NotStarted' }).Count) -gt 0) {
+        Start-Sleep -Milliseconds 100
+
+        $lCompleted = $($local_e_job | Where-Object { $_.State -eq 'Completed' -or $_.State -eq 'Failed' } ).Count 
+        $oCompleted = $($online_e_jobs | Where-Object { $_.State -eq 'Completed' -or $_.State -eq 'Failed' } ).Count 
+        $tCompleted = $($thumbnailJobs | Where-Object { $_.State -eq 'Completed' -or $_.State -eq 'Failed' } ).Count 
+        $allCompleted = $oCompleted + $tCompleted
+        
+        $allProgress = [string]::Format("{0:N2}", (($allCompleted / $allSteps) * 100))
+        $lProgress = [string]::Format("{0:N2}", (($lCompleted / $lSteps) * 100)) 
+        $oProgress = [string]::Format("{0:N2}", (($oCompleted / $eSteps) * 100))
+        $tProgress = [string]::Format("{0:N2}", (($tCompleted / $tSteps) * 100))
+
+        Write-Progress -Id 0 -Activity $all -Status "$all % $allProgress" -PercentComplete $allProgress
+        Write-Progress -Id 1 -ParentId 0 -Activity $lAct -Status "$lAct % $oProgress" -PercentComplete $lProgress
+        Write-Progress -Id 2 -ParentId 0 -Activity $oAct -Status "$oAct % $oProgress" -PercentComplete $oProgress
+        Write-Progress -Id 3 -ParentId 0 -Activity $tAct -Status "$tAct % $tProgress" -PercentComplete $tProgress
+    }
+    <#
+    Persisting job info (only do so when jobs are complete or incomplete results will be obtained).
+    Local episodes saved as online if none are found.
+    #>
+    $episodes = @{
+        new = @()
+        all = @()
+    }
+    $local = $( $local_e_job | Receive-Job )
+    $online = $( $online_e_jobs | Receive-Job )
+    if (0 -eq $local.Count) {
+        Save-Episodes -Episodes $online -File $(Get-EpisodesFilePath)
+        $episodes.all = @($online)
+    } else {
+        $episodes = Compare-Episodes -Oldest $local -Latest $online
+    }
+
+    # Cleanup. Impossible to remove ChildJobs so instead remove Parent Jobs.
+    Write-Progress -Id 0 -Activity $activity -Completed
+    Write-Progress -Id 1 -ParentId 0 -Activity $lActivity -Completed
+    Write-Progress -Id 2 -ParentId 0 -Activity $eActivity -Completed
+    Write-Progress -Id 3 -ParentId 0 -Activity $tActivity -Completed
+    if ($jobs) { $jobs | Remove-Job }
+
+    $episodes
 }
 
 <#
@@ -60,51 +409,50 @@ function Get-Podcasts {
 
 <#
 .SYNOPSIS
-Return an approved episode file string path for a file name.
+Return an approved episode file path.
 #>
-function Get-PodcastEpisodesFileName {
+function Get-EpisodeDownloadFileName {
     [CmdletBinding()]
     param (
         [Parameter()]
         [string] $Name
     )
-    join-path $(Get-EpisodeFolderPath) $( Approve-String $($Name + ".json") )
+    join-path $(Get-DownloadsFolderPath) $( Approve-String $($Name + ".mp3") )
 }
 
 <#
 .SYNOPSIS
-Return episodes contained within the provided file.
-.NOTES
-Best to encapsulate where called, i.e. @(Get-EpisodesLocal -File {})
+Return a list of episodes provided from $File.
 #>
-function Get-EpisodesLocal {
-    param(
-        [Parameter(Mandatory = $true)]
-        [ValidateScript({ Test-Path -Path $_ -PathType Leaf -and $_ -like "*.json" })]
-        [string] $File
-    )
-    [array]$(Get-Content -Path $file -Raw | ConvertFrom-Json -AsHashtable)
-}
-
-<#
-.SYNOPSIS
-Return episodes from the provided podcast.
-.NOTES
-Best to encapsulate where called, i.e. @(Get-EpisodesOnline -Podcast {})
-#>
-function Get-EpisodesOnline {
+function Get-EpisodesFromFile {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)]
-        [ValidateScript({ $null -ne $_.url })]
-        [hashtable] $Podcast
+        [Parameter(Mandatory)]
+        [ValidateScript({ Test-Path -Path $_ -PathType Leaf })]
+        [string] $File
     )
-    [array]$(ConvertFrom-PodcastWebRequestContent -Request $(Invoke-PodcastFeed -URI $Podcast.url))
+    [array]$(Get-Content -Path $File -Raw | ConvertFrom-Json -AsHashtable);
 }
 
 <#
 .SYNOPSIS
-Play the provided episode via VLC stream.
+Return an approved thumbnail file path.
+#>
+function Get-PodcastThumbnailFileName {
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [string] $Name
+    )
+    join-path $(Get-ThumbnailFolderPath) $( Approve-String $($Name + ".jpg") )
+}
+
+<#
+.SYNOPSIS
+Invokes VLC with the provided episodes URL.
+.NOTES
+Multiple instances may be started when enabled in VLC:
+https://wiki.videolan.org/VLC_HowTo/Play_multiple_instances/
 #>
 function Invoke-VlcStream {
     [CmdletBinding()]
@@ -114,12 +462,43 @@ function Invoke-VlcStream {
         [hashtable] $Episode,
         [Parameter()]
         [ValidateScript({ $null -ne $_ -and $_.length -gt 0 })]
-        [string] $VLC = "C:\Program Files\VideoLAN\VLC\vlc.exe",
+        [string] $VLC = $(Get-VlcPath),
         [Parameter()]
-        [ValidateRange(0,3)]
+        [ValidateRange(0, 3)]
         [float] $Rate = 1.5
     )
-    & $VLC --play-and-exit --rate=$Rate $($Episode.enclosure.url)
+    Invoke-Vlc -Stream $($Episode.enclosure.url) -Rate $Rate
+}
+
+<#
+.SYNOPSIS
+Play the provided media (file or stream or both) via VLC.
+.NOTES
+If both (stream and file) are provided then they may both both to play at the same time depending on VLC's multiple instances setting.
+Multiple instances may be started when enabled in VLC:
+https://wiki.videolan.org/VLC_HowTo/Play_multiple_instances/
+#>
+function Invoke-Vlc {
+    [CmdletBinding()]
+    param (
+        [Parameter()]
+        [ValidateScript({ Test-Path -Path $_ -PathType Leaf })]
+        [string] $File,
+        [Parameter()]
+        [ValidateScript({ $null -ne $_ -or "" -ne $_ })]
+        [string] $Stream,
+        [Parameter()]
+        [string] $VLC = $(Get-VlcPath),
+        [Parameter()]
+        [ValidateRange(0, 3)]
+        [Single] $Rate = 1.5
+    )
+    if ($File) {
+        & $VLC --play-and-exit --rate=$Rate $File
+    }
+    if ($Stream) {
+        & $VLC --play-and-exit --rate=$Rate $Stream
+    }
 }
 
 <#
@@ -131,7 +510,7 @@ Changes are only saved when they exist.
 function Remove-Podcast {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory)]
         [ValidateScript({ $_.Length -gt 0 })]
         [string]
         $Name
@@ -147,17 +526,17 @@ function Remove-Podcast {
         Save-Podcasts -Podcasts $keep
     }
     else {
-        Write-Host "$Name was not found. No podcasts were removed."
+        Write-Verbose "$Name was not found. No podcasts were removed."
     }
 }
 
 <#
 .SYNOPSIS
-Save all episodes provided at $file.
+Save the episodes list at $file.
 .DESCRIPTION
-Overwrites $file.
+Overwrites $file. Prevents writing to podcast file.
 .NOTES
-Parenthesis is necessary for validate script.
+Parenthesis in parameter block are necessary for validate script.
 #>
 function Save-Episodes {
     [CmdletBinding()]
@@ -166,7 +545,7 @@ function Save-Episodes {
         [ValidateScript({ $null -ne $_.title })]
         [array] $Episodes,
         [Parameter()]
-        [ValidateScript({ Test-Path -Path $_ -PathType Leaf })]
+        [ValidateScript({ (Test-Path -Path $_ -IsValid) -and ($_.FullName -ne $(Get-RssFilePath)) })]
         [string] $File
     )
     $Episodes | ConvertTo-Json | Out-File -FilePath $File -Force
@@ -183,7 +562,7 @@ The parenthesis are necessary for allowing empty collection.
 function Save-Podcasts {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory)]
         [AllowEmptyCollection()]
         [array] $Podcasts,
         [Parameter(Mandatory = $false)]
@@ -201,7 +580,7 @@ See Invoke-CastosPodcastSearch for type details.
 function Search-Podcasts {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory)]
         [ValidateScript({ $null -ne $_ -and $_.Length -gt 0 })]
         [String] $Name
     )
@@ -210,165 +589,6 @@ function Search-Podcasts {
         throw $search.data
     }
     $search
-}
-
-<#
-.SYNOPSIS
-Select an episode from the provided podcast.
-#>
-function Select-Episode {
-    [CmdletBinding()]
-    param (
-        [Parameter(
-            ValueFromPipeline = $true,
-            ValueFromPipelineByPropertyName = $true
-        )]
-        [hashtable] $Podcast = $( Select-Podcast -Podcasts @(Get-Podcasts) ),
-        [Parameter(
-            ValueFromPipeline = $true,
-            ValueFromPipelineByPropertyName = $true
-        )]
-        [ValidateSet('Today', 'Week', 'Month', 'Year', 'All')]
-        [string] $Published = "Week"
-    )
-    $episode = @{}
-    $episodes = @()
-    $file = Get-PodcastEpisodesFileName -Name $Podcast.title
-    if (Test-Path -Path $file -PathType Leaf) {
-        $episodes = @(Get-EpisodesLocal -File $file)
-    }
-    else {
-        $episodes = @(Get-EpisodesOnline -Podcast $Podcast)
-    }
-
-    if ($episodes.gettype().BaseType -eq [array] -and $episodes.Count -eq 0) {
-        throw "No episodes found for $($Podcast.title)."
-    }
-    Show-Episodes -Episodes $episodes -Published $Published
-    $choice = Read-Host "Select episode by number (above)"
-    try {
-        $episode = $Episodes[[int]::Parse($choice)]
-    }
-    catch {
-        throw "'$choice' failed to identify any episode."
-    }
-    $episode
-}
-
-<#
-.SYNOPSIS
-Selects the identified podcast from the provided podcasts.
-.DESCRIPTION
-When only one podcast is provided it is returned without show & selection.
-.NOTES
-Read-Host puts colon, i.e. ':', at the end.
-#>
-function Select-Podcast {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true)]
-        [array] $Podcasts
-    )
-    if ($Podcasts.Length -eq 1 -or $Podcasts.Count -eq 1) {
-        return $Podcasts[0]
-    }
-    Show-Podcasts -Podcasts $Podcasts
-    $choice = Read-Host "Select podcast by number (above)"
-    $podcast = @{}
-    try {
-        $podcast = $Podcasts[[int]::Parse($choice)]
-    }
-    catch {
-        throw "'$choice' failed to identify any podcast."
-    }
-    $podcast
-}
-
-<#
-.SYNOPSIS
-Display episodes to the console.
-.PARAMETER Published
-Determines which episodes based on date published to be listed.
-Today lists those within the last day ~ 24 hours.
-Week lists those within the last week ~ 7x24 ~ 168 hours.
-Month lists those within the last month ~ 168x4 ~ 672 hours.
-Year lists those within the last year ~ 672x12 ~ 8064 hours.
-All lists all episodes.
-.NOTES
-foreach-object does not behave the same way when using break as foreach.
-#>
-function Show-Episodes {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true)]
-        [ValidateScript({ 
-                if ( $null -eq $_ -or $_.Count -eq 0 ) { throw 'No episodes found.' }
-                $true # Must provide or will never return a result of $true.
-            })]
-        [array] $Episodes,
-        [Parameter(
-            ValueFromPipeline = $true,
-            ValueFromPipelineByPropertyName = $true
-        )]
-        [ValidateSet('Today', 'Week', 'Month', 'Year', 'All')]
-        [string] $Published = "Week",
-        [Parameter(
-            ValueFromPipeline = $true,
-            ValueFromPipelineByPropertyName = $true
-        )]
-        [Int16] $Pad = 3
-    )
-
-    $hours = 0
-    switch ($Published) {
-        'Today' { $hours = 24 }
-        'Week' { $hours = 168 }
-        'Month' { $hours = 672 }
-        'Year' { $hours = 8064 }
-        Default { $hours = 0 }
-    }
-
-    $filtered = @()
-    if ( -not $hours ) {
-        $filtered = $Episodes
-    }
-    else {
-        foreach ($e in $Episodes) {
-            if ( ($(Get-Date) - (Get-Date $e.pubDate).ToUniversalTime()).TotalHours -le $hours ) {
-                $filtered += @( $e )
-            }
-            else {
-                break
-            }
-        }
-    }
-
-    if ($filtered.Count -eq 0) {
-        throw "No episodes found within the last $hours hours."
-    }
-
-    $index_pad = $filtered.Count.ToString().Length
-    $title_pad = $($($($filtered) | ForEach-Object { $_.title.length }) | Measure-Object -Maximum).Maximum + $Pad
-    $pub_pad = $($($($filtered) | ForEach-Object { $_.pubDate.length }) | Measure-Object -Maximum).Maximum + $Pad
-    # Alternating foreground color and underscore for visual cue.
-    $original = $host.UI.RawUI.ForegroundColor
-    $s = "  "
-    $u = "__"
-    $filtered | ForEach-Object {
-        if ( $filtered.indexof($_) % 2) {
-            $host.UI.RawUI.ForegroundColor = 'DarkGray'
-            write-host $($([string]$filtered.indexof($_)).PadLeft($index_pad).Replace($s, $u) +
-                " " + $([string]$_.title).PadLeft($title_pad).Replace($s, $u) +
-                " " + $([string]$_.pubDate).PadLeft($pub_pad).Replace($s, $u))
-        }
-        else {
-            $host.UI.RawUI.ForegroundColor = $original
-            write-host $($([string]$filtered.indexof($_)).PadLeft($index_pad) +
-                " " + $([string]$_.title).PadLeft($title_pad) +
-                " " + $([string]$_.pubDate).PadLeft($pub_pad))
-        }
-    }
-    $host.UI.RawUI.ForegroundColor = $original
 }
 
 <#
@@ -400,14 +620,14 @@ function Show-Podcasts {
     $podcasts | ForEach-Object {
         if ( $podcasts.indexof($_) % 2) {
             $host.UI.RawUI.ForegroundColor = 'DarkGray'
-            write-host $($([string]$podcasts.indexof($_)).PadLeft($index_pad).Replace($s, $u) +
+            Write-Verbose $($([string]$podcasts.indexof($_)).PadLeft($index_pad).Replace($s, $u) +
                 " " + $([string]$_.title).PadLeft($title_pad).Replace($s, $u) +
                 " " + $([string]$_.author).PadLeft($authr_pad).Replace($s, $u) +
                 " " + $([string]$_.url).PadLeft($url_pad).Replace($s, $u))
         }
         else {
             $host.UI.RawUI.ForegroundColor = $original
-            write-host $($([string]$podcasts.indexof($_)).PadLeft($index_pad) +
+            Write-Verbose $($([string]$podcasts.indexof($_)).PadLeft($index_pad) +
                 " " + $([string]$_.title).PadLeft($title_pad) +
                 " " + $([string]$_.author).PadLeft($authr_pad) +
                 " " + $([string]$_.url).PadLeft($url_pad))

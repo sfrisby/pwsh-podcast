@@ -4,55 +4,19 @@ Ensure the string provided may be used as a file name.
 #>
 function Approve-String {
     param (
-        [Parameter(Mandatory = $true, ValueFromPipeline)]
+        [Parameter(Mandatory)]
+        [ValidateScript({ ($null -ne $_) -and ($_.length -gt 0) })]
         [string]$ToSanitize
     )
     [System.IO.Path]::GetInvalidFileNameChars() | ForEach-Object { 
         $tmp = $ToSanitize.replace("$_", "")
         if ($tmp.Length -lt $ToSanitize.Length) {
-            Write-Information "Invalid character '${_}' found; removing ..."
+            Write-Verbose "Stripping '${_}' from $ToSanitize"
             $ToSanitize = $tmp
         }
     }
     $ToSanitize
 }
-
-<#
-.SYNOPSIS
-Provided with lists of the oldest and latest episodes return a full list of all episodes.
-.DESCRIPTION
-A hashtable is returned containing the keys 'new' for new found episodes and 'all' for all episodes.
-Indexing is reversed to ensure the 'newest' episode is first in the list.
-.PARAMETER Oldest
-Expected to be the oldest list of episodes (local).
-.PARAMETER Latest
-Expected to be the latest list of episodes (online)
-#>
-function Get-NewAndAllSetForEpisodes {
-    param(
-        [parameter(Mandatory = $true)]
-        [ValidateScript({ $null -ne $_ })]
-        [array] $Oldest,
-        [parameter(Mandatory = $true)]
-        [ValidateScript({ $null -ne $_ })]
-        [array] $Latest
-    )
-    $compare = Compare-Object -ReferenceObject $Oldest -DifferenceObject $Latest -Property title
-    $all = New-Object 'System.Collections.ArrayList'
-    $all.AddRange($Oldest) # Storing all of the oldest entries.
-    $new = New-Object 'System.Collections.ArrayList'
-    for ($i = $compare.Length - 1; $i -ge 0; $i--) {
-        if ($compare[$i].SideIndicator -eq "=>") {
-            $new.Insert(0, $Episodes[$Episodes.title.IndexOf($compare[$i].title)] -as $Episodes[0].GetType())
-            $all.Insert(0, $Episodes[$Episodes.title.IndexOf($compare[$i].title)] -as $Episodes[0].GetType())
-        }
-    }
-    return @{
-        new = $( $new -as [array]) 
-        all = $( $all -as [array])
-    }
-}
-
 
 <#
 .SYNOPSIS
@@ -66,7 +30,7 @@ Inspired from https://github.com/Phil-Factor/PowerShell-Utility-Cmdlets/blob/mai
 function ConvertFrom-PodcastWebRequestContent {
     param
     (
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory)]
         [ValidateScript({ $null -ne $_ })]
         [Microsoft.PowerShell.Commands.WebResponseObject] $Request
     )
@@ -104,7 +68,7 @@ When no feeds are found then 'data' will be 'No feeds found.'
 #>
 function Invoke-CastosPodcastSearch {
     param (
-        [Parameter(Mandatory = $true, ValueFromPipeline)]
+        [Parameter(Mandatory, ValueFromPipeline)]
         [string]$Podcast
     )
     $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
@@ -165,9 +129,29 @@ I have yet to find a reliable solution for overcoming these rare instances.
 #>
 function Invoke-PodcastFeed {
     param(
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory)]
         [ValidateScript({ ($null -ne $_) -and ( $_.length -gt 0 ) })]
         [string] $URI
     )
     Invoke-WebRequest -Uri $URI -Method Get -ContentType "application/json"
+}
+
+<#
+.SYNOPSIS
+Download URL to specified or generated temporary path.
+.DESCRIPTION
+When no path is provided the download file will go to a temporary file.
+
+The file path is returned.
+#>
+function Invoke-Download {
+    param (
+        [Parameter(Mandatory)]
+        [string] $URI,
+        [Parameter()]
+        [ValidateScript({ (Test-Path -Path $_ -PathType Leaf -IsValid) -and ($_.Name -notmatch [System.IO.Path]::GetInvalidFileNameChars()) })]
+        [string] $File = [System.IO.Path]::GetTempFileName()
+    ) 
+    Invoke-WebRequest -Uri $URI -OutFile $File
+    $File
 }
