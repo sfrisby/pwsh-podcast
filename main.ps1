@@ -175,7 +175,7 @@ if ($GUI) {
         Add-Type -assembly System.Windows.Forms
     }
     catch {
-        Write-Verbose "Failed to load windows forms assembly: $($_.ErrorDetails)"
+        Write-Verbose "Failed to load windows forms assembly: $($_.ToString())"
         throw $_
     }
     
@@ -520,7 +520,7 @@ if ($GUI) {
                 }
             }
             catch {
-                Show-InfoMessage -Title "Unable to Stream" -Message "Failed to stream episode using VLC. $($_.ErrorDetails)"
+                Show-InfoMessage -Title "Unable to Stream" -Message "Failed to stream episode using VLC. $($_.ToString())"
             }
         })
 
@@ -568,7 +568,7 @@ if ($GUI) {
                 }
             }
             catch {
-                Show-InfoMessage -Title "Download Failed" -Message "Unable to download the episode. $($_.ErrorDetails)"
+                Show-InfoMessage -Title "Download Failed" -Message "Unable to download the episode. $($_.ToString())"
                 return
             }
             # VLC
@@ -577,7 +577,7 @@ if ($GUI) {
                 Invoke-Vlc -Rate $rate -File $download
             }
             catch {
-                Show-InfoMessage -Title "VLC Failed" -Message "Unable to play media with VLC. $($_.ErrorDetails)"
+                Show-InfoMessage -Title "VLC Failed" -Message "Unable to play media with VLC. $($_.ToString())"
             }
         })
 
@@ -621,7 +621,7 @@ if ($GUI) {
                 }
             }
             catch {
-                Show-InfoMessage -Title "Download Failed" "Unable to download the episode. $($_.ErrorDetails)"
+                Show-InfoMessage -Title "Download Failed" "Unable to download the episode. $($_.ToString())"
             }
         })
 

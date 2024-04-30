@@ -21,7 +21,7 @@ function Add-Podcast {
         Save-Podcasts -Podcasts @( $podcast )
     }
     elseif ($local.title -contains $podcast.title) {
-        Write-Verbose "$($podcast.title) already exists."
+        Write-Host "$($podcast.title) already exists."
     }
     else {
         if ($local.GetType().BaseType -ne [array]) {
@@ -593,6 +593,35 @@ function Search-Podcasts {
 
 <#
 .SYNOPSIS
+Selects the identified podcast from the provided podcasts.
+.DESCRIPTION
+When only one podcast is provided it is returned without show & selection.
+.NOTES
+Read-Host puts colon, i.e. ':', at the end.
+#>
+function Select-Podcast {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [array] $Podcasts
+    )
+    if ($Podcasts.Length -eq 1 -or $Podcasts.Count -eq 1) {
+        return $Podcasts[0]
+    }
+    Show-Podcasts -Podcasts $Podcasts
+    $choice = Read-Host "Select podcast by number (above)"
+    $podcast = @{}
+    try {
+        $podcast = $Podcasts[[int]::Parse($choice)]
+    }
+    catch {
+        throw "'$choice' failed to identify any podcast."
+    }
+    $podcast
+}
+
+<#
+.SYNOPSIS
 Display podcast information to the console.
 #>
 function Show-Podcasts {
@@ -620,14 +649,14 @@ function Show-Podcasts {
     $podcasts | ForEach-Object {
         if ( $podcasts.indexof($_) % 2) {
             $host.UI.RawUI.ForegroundColor = 'DarkGray'
-            Write-Verbose $($([string]$podcasts.indexof($_)).PadLeft($index_pad).Replace($s, $u) +
+            Write-Host $($([string]$podcasts.indexof($_)).PadLeft($index_pad).Replace($s, $u) +
                 " " + $([string]$_.title).PadLeft($title_pad).Replace($s, $u) +
                 " " + $([string]$_.author).PadLeft($authr_pad).Replace($s, $u) +
                 " " + $([string]$_.url).PadLeft($url_pad).Replace($s, $u))
         }
         else {
             $host.UI.RawUI.ForegroundColor = $original
-            Write-Verbose $($([string]$podcasts.indexof($_)).PadLeft($index_pad) +
+            Write-Host $($([string]$podcasts.indexof($_)).PadLeft($index_pad) +
                 " " + $([string]$_.title).PadLeft($title_pad) +
                 " " + $([string]$_.author).PadLeft($authr_pad) +
                 " " + $([string]$_.url).PadLeft($url_pad))
