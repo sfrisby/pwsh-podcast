@@ -38,4 +38,5 @@ Export-ModuleMember -Function Get-VlcPath, Get-IconPath, Get-DownloadsFolderPath
     Get-Podcasts, Add-Podcast, Remove-Podcast, Search-Podcasts, Show-Podcasts, `
     Get-EpisodeDownloadFileName, Get-PodcastThumbnailFileName, `
     Compare-Episodes, Get-EpisodesFromFile, Get-EpisodesWithinDate, Get-EpisodesLocal, Get-EpisodesOnline, Save-Episodes, `
-    Invoke-Download, Invoke-VlcStream, Invoke-Vlc
+    Invoke-Download, Invoke-VlcStream, Invoke-Vlc, `
+    Approve-String

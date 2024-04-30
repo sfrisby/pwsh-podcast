@@ -102,22 +102,16 @@ if (Test-Path -Path $script:TagLibSharp_Path -PathType Leaf) {
             }
             # URL saved in Publisher tag.
             if ($null -eq $tags.Tag.Publisher -or $tags.Tag.Publisher -eq "") {
-                <#
-            
-            #>
                 $tags.Tag.Publisher = "$($Episode.enclosure.url)"
             }
-    
             # Album set to podcast_title
             if ($null -eq $tags.Tag.Album -or $tags.Tag.Album -eq "") {
                 $tags.Tag.Album = "$($Episode.podcast_title)"
             }
-    
             # Track number set to Year-Month-Day
             if ($null -eq $tags.Tag.Track -or $tags.Tag.Track -eq "") {
                 $tags.Tag.Track = "$($([datetime]$Episode.pubDate).ToString('yyMMdd'))"
             }
-    
             # Year set to pubDate. Discovered some posted years were incorrect ~ couple years behind.
             $year = "$(([datetime]($Episode.pubDate)).Year)"
             if ($null -eq $tags.Tag.Year -or $tags.Tag.Year -eq "" -or $tags.Tag.Year -ne $year) {
@@ -175,7 +169,7 @@ if ($GUI) {
         Add-Type -assembly System.Windows.Forms
     }
     catch {
-        Write-Verbose "Failed to load windows forms assembly: $($_.ErrorDetails)"
+        Write-Verbose "Failed to load windows forms assembly: $($_.ToString())"
         throw $_
     }
     
@@ -247,7 +241,8 @@ if ($GUI) {
     $newEpisodesButton.Add_Click({
             if ($null -eq $EPISODES.new -or 0 -eq $EPISODES.new.Count) {
                 Show-InfoMessage -Title "No new episodes" -Message "There aren't any new episodes."
-            } else {
+            }
+            else {
                 Reset-PodcastsThumbnailBorder
                 Update-ListViewWithPodcastTitleEpisodes -Handle $episodesListView -Episode $EPISODES.new
             }
@@ -268,7 +263,8 @@ if ($GUI) {
     $weekEpisodesButton.Add_Click({
             if ($null -eq $WEEKS_EPISODES -or 0 -eq $WEEKS_EPISODES.Count) {
                 Show-InfoMessage -Title "No weekly episodes" -Message "There aren't any episodes from the last week."
-            } else {
+            }
+            else {
                 Reset-PodcastsThumbnailBorder
                 Update-ListViewWithPodcastTitleEpisodes -Handle $episodesListView -Episode $WEEKS_EPISODES
             }
@@ -442,6 +438,7 @@ if ($GUI) {
 "@
     $episodeInfoDefaultDocumentText = ($episodeInfoSytle + `
             "<p>When the application loads, the episode list will contain the newest episodes for all podcasts. " + `
+            "Any newly added podcasts will have all of their episodes listed until they are saved and the GUI relaunched. " + `
             "If no new episodes are found then those published within the last week will be listed.</p>" + `
             "<p>To show all episodes for a specific podcast, simply click on the podcast's thumbnail (left).</p> " + `
             "<p>If no episodes are listed follow instructions provided in the README for adding a podcast. " + `
@@ -520,7 +517,7 @@ if ($GUI) {
                 }
             }
             catch {
-                Show-InfoMessage -Title "Unable to Stream" -Message "Failed to stream episode using VLC. $($_.ErrorDetails)"
+                Show-InfoMessage -Title "Unable to Stream" -Message "Failed to stream episode using VLC. $($_.ToString())"
             }
         })
 
@@ -568,7 +565,7 @@ if ($GUI) {
                 }
             }
             catch {
-                Show-InfoMessage -Title "Download Failed" -Message "Unable to download the episode. $($_.ErrorDetails)"
+                Show-InfoMessage -Title "Download Failed" -Message "Unable to download the episode. $($_.ToString())"
                 return
             }
             # VLC
@@ -577,7 +574,7 @@ if ($GUI) {
                 Invoke-Vlc -Rate $rate -File $download
             }
             catch {
-                Show-InfoMessage -Title "VLC Failed" -Message "Unable to play media with VLC. $($_.ErrorDetails)"
+                Show-InfoMessage -Title "VLC Failed" -Message "Unable to play media with VLC. $($_.ToString())"
             }
         })
 
@@ -621,7 +618,7 @@ if ($GUI) {
                 }
             }
             catch {
-                Show-InfoMessage -Title "Download Failed" "Unable to download the episode. $($_.ErrorDetails)"
+                Show-InfoMessage -Title "Download Failed" "Unable to download the episode. $($_.ToString())"
             }
         })
 
@@ -894,6 +891,7 @@ if ($GUI) {
     .SYNOPSIS
     Adding podcast thumbnail picture box controls to layout flow panel.
     .NOTES
+    If a thumbnail is not found then the podcast title characters will be drawn.
     Clears flow panel before adding.
     PictureBox Click event added here.
     #>
@@ -901,22 +899,16 @@ if ($GUI) {
         $podcastsThumbnailFlowPanel.Controls.Clear()
         Foreach ($podcast in $PODCASTS) {
             $pic = New-Object System.Windows.Forms.PictureBox
+            $picToolTip = New-Object System.Windows.Forms.ToolTip
+            $picToolTip.SetToolTip($pic, $podcast.title)
             $pic.Margin = 0
             $pic.Padding = 0
             $pic.BorderStyle = 'None'
             $pic.Width = $THUMB_SIZE_SQUARE
             $pic.Height = $THUMB_SIZE_SQUARE
             $pic.SizeMode = 'Zoom'
-            $path = Get-PodcastThumbnailFileName -Name $podcast.title
-            if (Test-Path -Path $path -PathType Leaf) {
-                $pic.Image = [System.Drawing.Image]::FromFile($path)
-                $pic.Tag = $podcast.title
-                $pic.Text = $podcast.title
-            }
-            else {
-                $pic.Tag = $podcast.title
-                $pic.Text = $podcast.title
-            }
+            $pic.Text = $podcast.title
+            $pic.Tag = $podcast.title
             $pic.Add_Click({
                     param ($s, $e)
                     if ("" -ne $script:SELECTED_THUMBNAIL -and $s.Tag -eq $script:SELECTED_THUMBNAIL) {
@@ -947,6 +939,29 @@ if ($GUI) {
                     $episodesListView.Items[0].Selected = $true # Selects the first item in the list.
                     $episodesListView.Show()
                 })
+            <# Thumbnail or Title characters #>
+            $path = $(Get-PodcastThumbnailFileName -Name $podcast.title)
+            if (Test-Path -Path $path -PathType Leaf) {
+                $pic.Image = [System.Drawing.Image]::FromFile($path)
+            }
+            else {
+                try {
+                    $brush = [system.drawing.SolidBrush]::new($BACK_LIGHTBLUE)
+                    $font = [System.Drawing.Font]::new("Arial", 16)
+                    $title_chars = $($($podcast.title) -split '\s' | ForEach-Object { $_.Substring(0, 1) }) | Join-String
+                    $title_img = [System.Drawing.Bitmap]::new($THUMB_SIZE_SQUARE, $THUMB_SIZE_SQUARE)
+                    $title_graphics = [System.Drawing.Graphics]::FromImage($title_img)
+                    $title_graphics.Clear([System.Drawing.Color]::FromArgb(40, 42, 44))
+                    $title_graphics.DrawString($title_chars, $font, $brush, 10, 10)
+                    $pic.Image = [System.Drawing.Image]::FromHbitmap($title_img.GetHbitmap())
+                }
+                finally {
+                    $brush.Dispose()
+                    $font.Dispose()
+                    $title_graphics.Dispose()
+                    $title_img.Dispose()
+                }
+            }
             [void] $podcastsThumbnailFlowPanel.Controls.Add($pic)
         }
     }
