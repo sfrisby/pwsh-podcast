@@ -247,7 +247,8 @@ if ($GUI) {
     $newEpisodesButton.Add_Click({
             if ($null -eq $EPISODES.new -or 0 -eq $EPISODES.new.Count) {
                 Show-InfoMessage -Title "No new episodes" -Message "There aren't any new episodes."
-            } else {
+            }
+            else {
                 Reset-PodcastsThumbnailBorder
                 Update-ListViewWithPodcastTitleEpisodes -Handle $episodesListView -Episode $EPISODES.new
             }
@@ -268,7 +269,8 @@ if ($GUI) {
     $weekEpisodesButton.Add_Click({
             if ($null -eq $WEEKS_EPISODES -or 0 -eq $WEEKS_EPISODES.Count) {
                 Show-InfoMessage -Title "No weekly episodes" -Message "There aren't any episodes from the last week."
-            } else {
+            }
+            else {
                 Reset-PodcastsThumbnailBorder
                 Update-ListViewWithPodcastTitleEpisodes -Handle $episodesListView -Episode $WEEKS_EPISODES
             }
@@ -442,6 +444,7 @@ if ($GUI) {
 "@
     $episodeInfoDefaultDocumentText = ($episodeInfoSytle + `
             "<p>When the application loads, the episode list will contain the newest episodes for all podcasts. " + `
+            "Any newly added podcasts will have all of their episodes listed until they are saved and the GUI relaunched. " + `
             "If no new episodes are found then those published within the last week will be listed.</p>" + `
             "<p>To show all episodes for a specific podcast, simply click on the podcast's thumbnail (left).</p> " + `
             "<p>If no episodes are listed follow instructions provided in the README for adding a podcast. " + `
@@ -894,6 +897,7 @@ if ($GUI) {
     .SYNOPSIS
     Adding podcast thumbnail picture box controls to layout flow panel.
     .NOTES
+    If a thumbnail is not found then the podcast title will be drawn.
     Clears flow panel before adding.
     PictureBox Click event added here.
     #>
@@ -907,16 +911,35 @@ if ($GUI) {
             $pic.Width = $THUMB_SIZE_SQUARE
             $pic.Height = $THUMB_SIZE_SQUARE
             $pic.SizeMode = 'Zoom'
-            $path = Get-PodcastThumbnailFileName -Name $podcast.title
-            if (Test-Path -Path $path -PathType Leaf) {
-                $pic.Image = [System.Drawing.Image]::FromFile($path)
-                $pic.Tag = $podcast.title
-                $pic.Text = $podcast.title
-            }
-            else {
-                $pic.Tag = $podcast.title
-                $pic.Text = $podcast.title
-            }
+            $picToolTip = New-Object System.Windows.Forms.ToolTip
+            $picToolTip.SetToolTip($pic, $podcast.title)
+            $pic.Text = $podcast.title
+            $pic.Add_Paint({
+                param($s, $e)
+                $path = Get-PodcastThumbnailFileName -Name $s.Text
+                if (Test-Path -Path $path -PathType Leaf) {
+                    $pic.Image = [System.Drawing.Image]::FromFile($path)
+                }
+                else {
+                    $pic.BackColor = [System.Drawing.Color]::Transparent
+                    $pic.ForeColor = $FORE_LIGHT
+                    try {
+                        $graphics = $pic.CreateGraphics()
+                        $font = [System.Drawing.Font]::new("Arial", 24)
+                        $brush = [system.drawing.SolidBrush]::new($form.ForeColor)
+    
+                        $size = $graphics.MeasureString($text, $font)
+                        $x = ($pic.ClientRectangle.Width - $size.Width) / 2
+                        $y = ($pic.ClientRectangle.Height - $size.Height) / 2
+    
+                        $graphics.DrawString($podcast.title, $font, $brush, $x, $y)
+                    } finally {
+                        $graphics.Dispose()
+                        $brush.Dispose()
+                        $font.Dispose()
+                    }
+                }
+            })
             $pic.Add_Click({
                     param ($s, $e)
                     if ("" -ne $script:SELECTED_THUMBNAIL -and $s.Tag -eq $script:SELECTED_THUMBNAIL) {
