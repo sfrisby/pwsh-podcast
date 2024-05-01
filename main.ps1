@@ -897,7 +897,7 @@ if ($GUI) {
     .SYNOPSIS
     Adding podcast thumbnail picture box controls to layout flow panel.
     .NOTES
-    If a thumbnail is not found then the podcast title will be drawn.
+    If a thumbnail is not found then the podcast title characters will be drawn.
     Clears flow panel before adding.
     PictureBox Click event added here.
     #>
@@ -905,41 +905,16 @@ if ($GUI) {
         $podcastsThumbnailFlowPanel.Controls.Clear()
         Foreach ($podcast in $PODCASTS) {
             $pic = New-Object System.Windows.Forms.PictureBox
+            $picToolTip = New-Object System.Windows.Forms.ToolTip
+            $picToolTip.SetToolTip($pic, $podcast.title)
             $pic.Margin = 0
             $pic.Padding = 0
             $pic.BorderStyle = 'None'
             $pic.Width = $THUMB_SIZE_SQUARE
             $pic.Height = $THUMB_SIZE_SQUARE
             $pic.SizeMode = 'Zoom'
-            $picToolTip = New-Object System.Windows.Forms.ToolTip
-            $picToolTip.SetToolTip($pic, $podcast.title)
             $pic.Text = $podcast.title
-            $pic.Add_Paint({
-                param($s, $e)
-                $path = Get-PodcastThumbnailFileName -Name $s.Text
-                if (Test-Path -Path $path -PathType Leaf) {
-                    $pic.Image = [System.Drawing.Image]::FromFile($path)
-                }
-                else {
-                    $pic.BackColor = [System.Drawing.Color]::Transparent
-                    $pic.ForeColor = $FORE_LIGHT
-                    try {
-                        $graphics = $pic.CreateGraphics()
-                        $font = [System.Drawing.Font]::new("Arial", 24)
-                        $brush = [system.drawing.SolidBrush]::new($form.ForeColor)
-    
-                        $size = $graphics.MeasureString($text, $font)
-                        $x = ($pic.ClientRectangle.Width - $size.Width) / 2
-                        $y = ($pic.ClientRectangle.Height - $size.Height) / 2
-    
-                        $graphics.DrawString($podcast.title, $font, $brush, $x, $y)
-                    } finally {
-                        $graphics.Dispose()
-                        $brush.Dispose()
-                        $font.Dispose()
-                    }
-                }
-            })
+            $pic.Tag = $podcast.title
             $pic.Add_Click({
                     param ($s, $e)
                     if ("" -ne $script:SELECTED_THUMBNAIL -and $s.Tag -eq $script:SELECTED_THUMBNAIL) {
@@ -970,6 +945,29 @@ if ($GUI) {
                     $episodesListView.Items[0].Selected = $true # Selects the first item in the list.
                     $episodesListView.Show()
                 })
+            <# Thumbnail or Title characters #>
+            $path = $(Get-PodcastThumbnailFileName -Name $podcast.title)
+            if (Test-Path -Path $path -PathType Leaf) {
+                $pic.Image = [System.Drawing.Image]::FromFile($path)
+            }
+            else {
+                try {
+                    $brush = [system.drawing.SolidBrush]::new($BACK_LIGHTBLUE)
+                    $font = [System.Drawing.Font]::new("Arial", 16)
+                    $title_chars = $($($podcast.title) -split '\s' | ForEach-Object { $_.Substring(0, 1) }) | Join-String
+                    $title_img = [System.Drawing.Bitmap]::new($THUMB_SIZE_SQUARE, $THUMB_SIZE_SQUARE)
+                    $title_graphics = [System.Drawing.Graphics]::FromImage($title_img)
+                    $title_graphics.Clear([System.Drawing.Color]::FromArgb(40, 42, 44))
+                    $title_graphics.DrawString($title_chars, $font, $brush, 10, 10)
+                    $pic.Image = [System.Drawing.Image]::FromHbitmap($title_img.GetHbitmap())
+                }
+                finally {
+                    $brush.Dispose()
+                    $font.Dispose()
+                    $title_graphics.Dispose()
+                    $title_img.Dispose()
+                }
+            }
             [void] $podcastsThumbnailFlowPanel.Controls.Add($pic)
         }
     }
