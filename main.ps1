@@ -102,22 +102,16 @@ if (Test-Path -Path $script:TagLibSharp_Path -PathType Leaf) {
             }
             # URL saved in Publisher tag.
             if ($null -eq $tags.Tag.Publisher -or $tags.Tag.Publisher -eq "") {
-                <#
-            
-            #>
                 $tags.Tag.Publisher = "$($Episode.enclosure.url)"
             }
-    
             # Album set to podcast_title
             if ($null -eq $tags.Tag.Album -or $tags.Tag.Album -eq "") {
                 $tags.Tag.Album = "$($Episode.podcast_title)"
             }
-    
             # Track number set to Year-Month-Day
             if ($null -eq $tags.Tag.Track -or $tags.Tag.Track -eq "") {
                 $tags.Tag.Track = "$($([datetime]$Episode.pubDate).ToString('yyMMdd'))"
             }
-    
             # Year set to pubDate. Discovered some posted years were incorrect ~ couple years behind.
             $year = "$(([datetime]($Episode.pubDate)).Year)"
             if ($null -eq $tags.Tag.Year -or $tags.Tag.Year -eq "" -or $tags.Tag.Year -ne $year) {

@@ -201,9 +201,15 @@ function Get-EpisodesOnline {
         [ValidateScript({ ( $null -ne $_.url ) -and ( $null -ne $_.title ) })]
         [hashtable] $Podcast
     )
-    $request = $(Invoke-PodcastFeed -URI $Podcast.url)
-    $table = $(ConvertFrom-PodcastWebRequestContent -Request $request)
-    $table | ForEach-Object { $_.podcast_title = $Podcast.title }
+    $request = @()
+    $table = @{}
+    try {
+        $request = $(Invoke-PodcastFeed -URI $Podcast.url)
+        $table = $(ConvertFrom-PodcastWebRequestContent -Request $request)
+        $table | ForEach-Object { $_.podcast_title = $Podcast.title }
+    } catch {
+        throw "Issue upon obtaining online episodes for $($Podcast.title): $($_.ToString())."
+    }
 
     $table
 }
