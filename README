@@ -144,6 +144,10 @@ It is unclear why the following issues occur:
 
 Downloading the episode has been found to resolve these issues.
 
+### Forbidden
+
+There are many reasons as to why this is a provided response to a stream or download request. Specific cases will vary but waiting (some times a couple hours) has always been found to resolve the issue.
+
 ### Unknown or Unresolved Host
 This appears to occur when accessing the RSS is also being updated at the same time. Wait a couple minutes and try again.
 
