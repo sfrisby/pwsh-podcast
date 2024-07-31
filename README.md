@@ -13,19 +13,16 @@
 
 This application contains basic boilerplate for processing podcast RSS information through PowerShell.
 
-Media playback relies on the default installation location for [VLC](https://www.videolan.org/vlc/):
-
-    C:\Program Files\VideoLAN\VLC\vlc.exe.
-
-Access to podcasts is provided by both console commands or launching a Windows Forms GUI.
-
-It is recommended to use PowerShell 7.4 or newer.
+Access to podcasts is provided both by CLI or Windows Forms GUI.
 
 ## Getting Started
+
+It is recommended to use PowerShell 7.4 or newer.
 
 Open PowerShell within the application directory and run the **main.ps1** script. This will automatically import the module PwShPodcasts and setup the expected folder structure used by the application.
 
 The expected file structure is outlined as follows:
+
 ```
 Root Folder (application folder; where main.ps1 exists)
 |
@@ -40,9 +37,16 @@ Root Folder (application folder; where main.ps1 exists)
  `-- downloads (contains any downloaded podcast episodes)
 ```
 
-If you encounter any errors ensure your account has the privilege to read and write files and create folders on the filesystem.
+Media playback relies on [VLC](https://www.videolan.org/vlc/). The following path(s) are checked:
 
-### Optional download requirement
+|     | default | alternate |
+| :-- | :--     | :--       |
+| Windows | C:\Program Files\VideoLAN\VLC\vlc.exe | |
+| Unix | /snapd/bin/vlc | /usr/bin/vlc |
+
+If you encounter any errors ensure your account has read and write privileges on the filesystem.
+
+### TagLibSharp Optional
 
 If you plan to download episodes (highly recommended) then you will want to update the MP3 tags. This may be accomplished automatically using [TagLibSharp](https://www.nuget.org/packages/TagLibSharp). Ensure the **TagLibSharp.dll** exists within a folder named **bin** within your users home directory, i.e. **~/bin/TagLibSharp.dll**.
 
@@ -82,7 +86,7 @@ To ensure the title is found and a podcast is removed the following steps may be
 * Use **Get_Podcasts** to obtain the specific podcast information using the index number.
 * Feed the title of the podcast into **Remove-Podcast**.
 
-### Getting all episode information on console
+### Getting all episode information via CLI
 
 The main script must be executed with the **-ReturnData** flag.
 
@@ -97,6 +101,26 @@ The key '**all**' contains all episodes.
 The key '**new**' contains episodes found online but not saved locally. When the local episode file has been updated recently and no episodes have been published online then this list will be empty.
 
     > $data.new
+
+### Get episodes based on Date
+
+The published date parameter accepts **Today** (published within 24 hours), **Week** (published within 24 x 7 hours), **Month** (published within 24 x 7 x 4 hours), or **Year** (published within 24 x 7 x 4 x 12 hours).
+
+    > $today = Get-EpisodesWithinDate -Episodes $data.new -Published Today
+
+    > $week = Get-EpisodesWithinDate -Episodes $data.new -Published Week
+
+### Download Podcast Episode
+
+Having determined the INDEX of the desired episode, it may be downloaded to the default download location with the following steps:
+
+    > $episode = $data.new[INDEX]
+    > $file = Get-EpisodeDownloadFileName -Name $episode.title
+    > Invoke-Download -URI $episode.enclosure.url -File $file
+
+### Playing the local Podcast Episode
+
+    > Invoke-Vlc -File './downloads/<FILE>.mp3'
 
 ### Manually saving episodes
 

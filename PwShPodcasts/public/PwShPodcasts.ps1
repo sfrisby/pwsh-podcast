@@ -369,6 +369,8 @@ function Format-PodcastsTasks {
     Local episodes saved as online if none are found.
     
     Loud thumbnail jobs means a problem occurred.
+
+    Do not save episodes if there are no podcasts found.
     #>
     $episodes = @{
         new = @()
@@ -376,7 +378,7 @@ function Format-PodcastsTasks {
     }
     $local_e_job = $( $local_e_job | Receive-Job )
     $online_e_jobs = $( $online_e_jobs | Receive-Job )
-    if (0 -eq $local_e_job.Count) {
+    if (0 -eq $local_e_job.Count -and $(Get-Podcasts).count -ne 0) {
         Save-Episodes -Episodes $online_e_jobs -File $(Get-EpisodesFilePath)
         $episodes.all = @($online_e_jobs)
     } else {
