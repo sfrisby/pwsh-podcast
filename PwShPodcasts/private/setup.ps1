@@ -34,8 +34,26 @@ try {
         }
     }
 
-    # Ensure VLC location. 
-    $path_vlc = "C:\Program Files\VideoLAN\VLC\vlc.exe"
+    # Ensure VLC location based on OS.
+    $path_vlc = $null
+    $platform = [System.Environment]::OSVersion.Platform
+    if ( ($null -eq $platform) -or ("" -eq $platform) ) {
+        throw "Unable to detect OS platform within ${PSScriptRoot}. Exiting setup."
+    }
+    switch ($platform) {
+        "Unix" { 
+            $snap = "/snap/bin/vlc"
+            $user = "/usr/bin/vlc"
+            if (Test-Path -Path $snap -PathType Leaf -IsValid) {
+                $path_vlc = $snap
+            } elseif (Test-Path -Path $user -PathType Leaf -IsValid) {
+                $path_vlc = $user
+            }
+        }
+        Default {
+            $path_vlc = "C:\Program Files\VideoLAN\VLC\vlc.exe"
+        }
+    }
     if ( -not (Test-Path -Path $path_vlc -PathType Leaf -IsValid) ) {
         throw "Change VLC path within ${PSScriptRoot} and try again."
     }

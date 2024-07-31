@@ -21,7 +21,7 @@ function Add-Podcast {
         Save-Podcasts -Podcasts @( $podcast )
     }
     elseif ($local.title -contains $podcast.title) {
-        Write-Verbose "$($podcast.title) already exists."
+        Write-Host "$($podcast.title) already exists."
     }
     else {
         if ($local.GetType().BaseType -ne [array]) {
@@ -39,8 +39,6 @@ Obtain the thumbnail (image) by the provided podcast.
 Resizes the thumbnail to $Scale. 
 .NOTES
 System.Drawing.Bitmap.save does not override existing files.
-
-The use of Get-PodcastThumbnailFileName must be exported for visibility outside the module due to use in threads.
 #>
 function ConfirmPodcastThumbnail {
     [CmdletBinding()]
@@ -65,7 +63,9 @@ function ConfirmPodcastThumbnail {
         $thumbnail.Dispose()
         $graphics.Dispose()
         $resize.Dispose()
-    } <# Not catching here so thread contains any errors. #>
+    } catch {
+        throw $_
+    }
     finally {
         if ($thumbnail) { $thumbnail.Dispose() }
         if ($graphics) { $thumbnail.Dispose() }
@@ -78,6 +78,8 @@ function ConfirmPodcastThumbnail {
 Download and resize (if not found) all podcast thumbnails in parallel.
 .DESCRIPTION
 Because the file name isn't specified, the called method will use the default (podcast title) for file name.
+.NOTES
+ConfirmPodcastThumbnail MUST be scopped by parent.
 .FUNCTIONALITY
 DOES NOT CLEANUP JOBS! DO SO WHERE CALLED.
 #>
@@ -91,8 +93,8 @@ function ConfirmAllPodcastThumbnails {
     foreach ($podcast in $Podcasts) {
         $n = "thumbnail for $($podcast.title)"
         $block = {
-            $function:CPT = "$using:function:ConfirmPodcastThumbnail"
-            CPT -Podcast $using:variable:podcast
+            $function:CPT = $using:function:ConfirmPodcastThumbnail
+            return (CPT -Podcast $using:variable:podcast)
         }
         Start-ThreadJob -InitializationScript $i -ScriptBlock $block -Name $n
     }
@@ -199,9 +201,15 @@ function Get-EpisodesOnline {
         [ValidateScript({ ( $null -ne $_.url ) -and ( $null -ne $_.title ) })]
         [hashtable] $Podcast
     )
-    $request = $(Invoke-PodcastFeed -URI $Podcast.url)
-    $table = $(ConvertFrom-PodcastWebRequestContent -Request $request)
-    $table | ForEach-Object { $_.podcast_title = $Podcast.title }
+    $request = @()
+    $table = @{}
+    try {
+        $request = $(Invoke-PodcastFeed -URI $Podcast.url)
+        $table = $(ConvertFrom-PodcastWebRequestContent -Request $request)
+        $table | ForEach-Object { $_.podcast_title = $Podcast.title }
+    } catch {
+        throw "Issue upon obtaining online episodes for $($Podcast.title): $($_.ToString())."
+    }
 
     $table
 }
@@ -307,6 +315,7 @@ function Format-PodcastsTasks {
     $jobs += ( Start-ThreadJob -InitializationScript $i -ScriptBlock $block_online_episodes -Name $names.online_e )
     <# THUMBNAILS JOB #>
     $block_thumbnails = {
+        $function:ConfirmPodcastThumbnail = "$using:function:ConfirmPodcastThumbnail"
         $function:CAPT = "$using:function:ConfirmAllPodcastThumbnails"
         CAPT
     }
@@ -316,9 +325,9 @@ function Format-PodcastsTasks {
     $online_e_jobs = $null
     $thumbnailJobs = $null
     while ($null -eq $local_e_job -or $null -eq $online_e_jobs -or $null -eq $thumbnailJobs) {
-        $local_e_job = $( Get-Job -Name $names.local_e ) # Don't include children when they don't exist. Wait to receive.
-        $online_e_jobs = $( Get-Job -Name $names.online_e -IncludeChildJob | Wait-Job | Receive-Job )
-        $thumbnailJobs = $( Get-Job -Name $names.thumbnails -IncludeChildJob | Wait-Job | Receive-Job )
+        $local_e_job = $( Get-Job -Name $names.local_e ) # Exclude children as they may not exist. Wait to receive.
+        $online_e_jobs = $( Get-Job -Name $names.online_e -IncludeChildJob | Wait-Job | Receive-Job) # Receiving to have proper job count.
+        $thumbnailJobs = $( Get-Job -Name $names.thumbnails -IncludeChildJob | Wait-Job | Receive-Job) # Receiving to have proper job count.
     }
     # Total counts
     $lSteps = $local_e_job.Count
@@ -356,19 +365,25 @@ function Format-PodcastsTasks {
     }
     <#
     Persisting job info (only do so when jobs are complete or incomplete results will be obtained).
+    
     Local episodes saved as online if none are found.
+    
+    Loud thumbnail jobs means a problem occurred.
     #>
     $episodes = @{
         new = @()
         all = @()
     }
-    $local = $( $local_e_job | Receive-Job )
-    $online = $( $online_e_jobs | Receive-Job )
-    if (0 -eq $local.Count) {
-        Save-Episodes -Episodes $online -File $(Get-EpisodesFilePath)
-        $episodes.all = @($online)
+    $local_e_job = $( $local_e_job | Receive-Job )
+    $online_e_jobs = $( $online_e_jobs | Receive-Job )
+    if (0 -eq $local_e_job.Count) {
+        Save-Episodes -Episodes $online_e_jobs -File $(Get-EpisodesFilePath)
+        $episodes.all = @($online_e_jobs)
     } else {
-        $episodes = Compare-Episodes -Oldest $local -Latest $online
+        $episodes = Compare-Episodes -Oldest $local_e_job -Latest $online_e_jobs
+    }
+    if ( $( $thumbnailJobs | where-object { $_.HasMoreData -eq $true }).count ) {
+        Write-Verbose "Issue encountered while obtaining thumbnails: $( $thumbnailJobs | receive-job ) "
     }
 
     # Cleanup. Impossible to remove ChildJobs so instead remove Parent Jobs.
@@ -593,6 +608,35 @@ function Search-Podcasts {
 
 <#
 .SYNOPSIS
+Selects the identified podcast from the provided podcasts.
+.DESCRIPTION
+When only one podcast is provided it is returned without show & selection.
+.NOTES
+Read-Host puts colon, i.e. ':', at the end.
+#>
+function Select-Podcast {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [array] $Podcasts
+    )
+    if ($Podcasts.Length -eq 1 -or $Podcasts.Count -eq 1) {
+        return $Podcasts[0]
+    }
+    Show-Podcasts -Podcasts $Podcasts
+    $choice = Read-Host "Select podcast by number (above)"
+    $podcast = @{}
+    try {
+        $podcast = $Podcasts[[int]::Parse($choice)]
+    }
+    catch {
+        throw "'$choice' failed to identify any podcast."
+    }
+    $podcast
+}
+
+<#
+.SYNOPSIS
 Display podcast information to the console.
 #>
 function Show-Podcasts {
@@ -620,14 +664,14 @@ function Show-Podcasts {
     $podcasts | ForEach-Object {
         if ( $podcasts.indexof($_) % 2) {
             $host.UI.RawUI.ForegroundColor = 'DarkGray'
-            Write-Verbose $($([string]$podcasts.indexof($_)).PadLeft($index_pad).Replace($s, $u) +
+            Write-Host $($([string]$podcasts.indexof($_)).PadLeft($index_pad).Replace($s, $u) +
                 " " + $([string]$_.title).PadLeft($title_pad).Replace($s, $u) +
                 " " + $([string]$_.author).PadLeft($authr_pad).Replace($s, $u) +
                 " " + $([string]$_.url).PadLeft($url_pad).Replace($s, $u))
         }
         else {
             $host.UI.RawUI.ForegroundColor = $original
-            Write-Verbose $($([string]$podcasts.indexof($_)).PadLeft($index_pad) +
+            Write-Host $($([string]$podcasts.indexof($_)).PadLeft($index_pad) +
                 " " + $([string]$_.title).PadLeft($title_pad) +
                 " " + $([string]$_.author).PadLeft($authr_pad) +
                 " " + $([string]$_.url).PadLeft($url_pad))

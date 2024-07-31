@@ -1,5 +1,4 @@
-<!---
-
+<!-- 
 .SYNOPSIS
 README for PowerShell Podcast project.
 
@@ -8,9 +7,7 @@ When using VSCode:
 * Preview shortcut - 'ctrl + shift + v'
 * Preview to the right shortcut - 'ctrl + k then v'
 * Within the preview any 'double-click' will navigates to MD source location.
-
---->
-
+-->
 # Podcasts in PowerShell
 
 This application contains basic boilerplate for processing podcast RSS information through PowerShell.
@@ -143,6 +140,10 @@ It is unclear why the following issues occur:
 * Audio cuts in and out during playback.
 
 Downloading the episode has been found to resolve these issues.
+
+### Forbidden
+
+There are many reasons as to why this is a provided response to a stream or download request. Specific cases will vary but waiting (some times a couple hours) has always been found to resolve the issue.
 
 ### Unknown or Unresolved Host
 This appears to occur when accessing the RSS is also being updated at the same time. Wait a couple minutes and try again.
