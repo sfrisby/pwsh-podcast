@@ -14,7 +14,7 @@
 RootModule = '.\PwShPodcasts.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.4.0'
+ModuleVersion = '1.5.0'
 
 # ID used to uniquely identify this module
 GUID = '91b7bd0c-89a3-467b-a8b9-2f5a6ae376c8'
