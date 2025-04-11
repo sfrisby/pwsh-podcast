@@ -1,5 +1,8 @@
+/resource/all.json
+/resource/rss.json
+*.test.json
+*_episodes.json
 *.vscode
 *.db
 *.jpg
-*.json
 *.mp3

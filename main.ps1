@@ -1,3 +1,14 @@
+# TODO
+
+# check config & setup
+
+# ensure paths & dependencies
+
+# save config if updated
+
+
+
+
 <#
 .SYNOPSIS
 Main entry point. By default imports PwShPodcasts and, when found, TagLibSharp.
@@ -133,7 +144,7 @@ if (Test-Path -Path $script:TagLibSharp_Path -PathType Leaf) {
     Write-Verbose "TagLibSharp library found."
 }
 else {
-    Write-Warning "TagLibSharp library    N O T    found."
+    Write-Warning "missing TagLibSharp library."
 }
 
 # Always providing podcasts and a list of episodes from all podcasts.
@@ -1019,7 +1030,7 @@ if ($GUI) {
         [void] $form.ShowDialog()
     }
     finally {
-        Write-Verbose "Disposing of GUI . . ."
+        Write-Verbose "Disposing PowerShell Podcast GUI ..."
         $form.Dispose()
     }
 }
