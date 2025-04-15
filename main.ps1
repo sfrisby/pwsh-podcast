@@ -1,20 +1,15 @@
-# TODO
-
-# check config & setup
-
-# ensure paths & dependencies
-
-# save config if updated
-
-
-
-
 <#
+
 .SYNOPSIS
-Main entry point. By default imports PwShPodcasts and, when found, TagLibSharp.
+
+Main entry point for PowerShell Podcasts.
+
 .DESCRIPTION
-Environment is always setup in order to access podcast information reliably.
-Checks for existance of TagLibSharp DLL.
+
+Peruse, manage, and listen to desired podcasts.
+
+Always performs setup upon launch, providing saved configuration and podcasts.
+
 .PARAMETER GUI
 Provide to launch the GUI.
 .EXAMPLE
@@ -47,110 +42,20 @@ param (
     [switch] $ReturnData
 )
 
-<# PwShPodcasts Module #>
-if (Get-Module -Name PwShPodcasts) {
-    Remove-Module -Name PwShPodcasts
-}
-Import-Module .\PwShPodcasts
+<#
 
-<# TagLibSharp DLL #>
-$script:LOADED_TAG_LIB_SHARP = $false
-if ($HOME) { $script:TagLibSharp_Path = join-path $HOME "bin\TagLibSharp.dll" } else { $script:TagLibSharp_Path = join-path [Environment]::GetFolderPath("UserProfile") "bin\TagLibSharp.dll" }
-if (Test-Path -Path $script:TagLibSharp_Path -PathType Leaf) {
-    [void] [Reflection.Assembly]::LoadFrom($script:TagLibSharp_Path)
-    $script:LOADED_TAG_LIB_SHARP = $true
-    <#
-    .SYNOPSIS
-    Update the provided files tags based on the provided episode.
-    .NOTES
-    https://github.com/mono/taglib-sharp
-    A setfield property should exist but not found as a member for the audio tags.
-    ---
-    if ($null -eq $tags.Tag.URL) { $tags.Tag += @{'URL' = $episode.enclosure.url} }
-    InvalidOperation: Method invocation failed because [TagLib.NonContainer.Tag] does not contain a method named 'op_Addition'.
-    ---
-    $tags.Tag.Tags += @ {'URL'=$episode.enclosure.url}
-    InvalidOperation: 'Tags' is a ReadOnly property.
-    ---
-    $tags.Tag.Tags.'URL'=$episode.enclosure.url         
-    InvalidOperation: The property 'URL' cannot be found on this object. Verify that the property exists and can be set.
-    #>
-    function Update-PodcastEpisodeTags {
-        [CmdletBinding()]
-        param (
-            [Parameter(Mandatory)]
-            [ValidateScript({ $null -ne $_.title })]
-            [hashtable] $Episode,
-            [Parameter(Mandatory)]
-            [ValidateScript({ Test-Path -Path $_ -PathType Leaf })]
-            [string] $File
-        )
-        $tags = [TagLib.File]::Create( $(Get-ChildItem -Path $File) )
-        try {    
-            # Author is not always published (may not exist) but podcast_title will.
-            if ($null -ne $Episode.author -or $Episode.author -eq "") {
-                if ($null -eq $tags.Tag.Artists -or $tags.Tag.Artists.Count -eq 0) {
-                    $tags.Tag.Artists = "$($Episode.author)"
-                }
-            }
-            else {
-                if ($null -eq $tags.Tag.Artists -or $tags.Tag.Artists.Count -eq 0) {
-                    $tags.Tag.Artists = "$($Episode.podcast_title)"
-                }
-            }
-            # Comment - description or encoding.
-            if ($null -eq $tags.Tag.Description -or $tags.Tag.Description -eq "") {
-                if ($Episode.encoded) {
-                    $tags.Tag.Comment = "$($Episode.description)"
-                }
-                elseif ($Episode.encoded) {
-                    $tags.Tag.Comment = "$($Episode.encoded)"
-                }
-            }
-            # Title - episode not podcast.
-            if ($null -eq $tags.Tag.Title -or $tags.Tag.Title -eq "") {
-                $tags.Tag.Title = "$($Episode.title)"
-            }
-            # URL saved in Publisher tag.
-            if ($null -eq $tags.Tag.Publisher -or $tags.Tag.Publisher -eq "") {
-                $tags.Tag.Publisher = "$($Episode.enclosure.url)"
-            }
-            # Album set to podcast_title
-            if ($null -eq $tags.Tag.Album -or $tags.Tag.Album -eq "") {
-                $tags.Tag.Album = "$($Episode.podcast_title)"
-            }
-            # Track number set to Year-Month-Day
-            if ($null -eq $tags.Tag.Track -or $tags.Tag.Track -eq "") {
-                $tags.Tag.Track = "$($([datetime]$Episode.pubDate).ToString('yyMMdd'))"
-            }
-            # Year set to pubDate. Discovered some posted years were incorrect ~ couple years behind.
-            $year = "$(([datetime]($Episode.pubDate)).Year)"
-            if ($null -eq $tags.Tag.Year -or $tags.Tag.Year -eq "" -or $tags.Tag.Year -ne $year) {
-                $tags.Tag.Year = $year
-            }
-        }
-        catch {
-            throw "Exception thrown when updating tags: $_"
-        }
+Check config & setup ~ resolving paths & dependencies.
 
-        # Save and exit
-        try {
-            $tags.Save()
-        }
-        catch {
-            throw "Exception thrown when saving tags: $_"
-        }
-    }
-    Write-Verbose "TagLibSharp library found."
-}
-else {
-    Write-Warning "missing TagLibSharp library."
-}
+Remove '#' in front of '-Verbose' for more output.
+
+#>
+$pods, $cfg = .\"$PSScriptRoot\setup.ps1" # -Verbose
+
 
 # Always providing podcasts and a list of episodes from all podcasts.
-$script:SELECTED_THUMBNAIL = ""
-$PODCASTS = @(Get-Podcasts)
-$EPISODES = Format-PodcastsTasks
+# $script:SELECTED_THUMBNAIL = ""
+# $PODCASTS = @(Get-Podcasts)
+# $EPISODES = Format-PodcastsTasks
 
 <#
 .SYNOPSIS

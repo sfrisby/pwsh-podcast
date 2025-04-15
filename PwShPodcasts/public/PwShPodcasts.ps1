@@ -288,6 +288,8 @@ It also required "$using".
 Refer to https://stackoverflow.com/questions/68881237/powershell-start-job-scope. 
 
 Both text size of the activity and the status message change how progress is shown.
+
+TODO each podcast should have its own job.
 #>
 function Format-PodcastsTasks {
     if ( $(Get-Job).Count -ne 0 ) {
@@ -394,32 +396,6 @@ function Format-PodcastsTasks {
     if ($jobs) { $jobs | Remove-Job }
 
     $episodes
-}
-
-<#
-.SYNOPSIS
-Read information from provided $File and return it.
-.DESCRIPTION
-Default $File is the path provided by module member Get-RssFilePath.
-.NOTES
-It is possible for $File content to be $null!
-Even though ensuring an array of hashtable elements occurs here it should also be wrapped where called to ensure type, i.e. @(Get-Podcasts).
-#>
-function Get-Podcasts {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $false)]
-        [string] $File = $(Get-RssFilePath)
-    )
-    $tmp = [array]$(Get-Content -Path $File -Raw | ConvertFrom-Json -AsHashtable)
-    if ($null -eq $tmp) {
-        $tmp = 'No feeds found.'
-    }
-    elseif ($tmp.gettype() -eq [System.Management.Automation.OrderedHashtable]) {
-        $force = @( $tmp )
-        $tmp = $force
-    }
-    @($tmp)
 }
 
 <#

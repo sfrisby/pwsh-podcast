@@ -1,5 +1,8 @@
-/resource/all.json
-/resource/rss.json
+config.json
+test.json
+pbs*.json
+theforeignreport.json
+/resource/*.json
 *.test.json
 *_episodes.json
 *.vscode
