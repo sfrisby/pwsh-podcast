@@ -2,80 +2,34 @@
 
     .SYNOPSIS
 
-    List results of podcast search.
-
-    .DESCRIPTION
-
-    By default the foreground colors of each podcast alternate.
-
-    Additional foreground coloring performed when provided with the 'HighlightTitleMatches' switch.
+    Show compact results from podcast query.
 
     .PARAMETER Podcasts
 
-    Podcasts search information. 
-    
-    Expected to contain the following keys: 
-        query
-        response
-        data
-
-    .PARAMETER HighlightTitleMatches
-
-    Switch parameter to highlight any podcast title matching the query; displayed with a 'yellow' foreground color.
-
-    Matches are case insensitive.
+    Output from format_podcast_query.
 
     .EXAMPLE
 
-    $podcasts =  '<PATH>\search_podcasts.ps1' -Title "npr"
-
-    <PATH>\show_podcasts.ps1 -Podcasts $podcasts
+    $r = .\test\invoke_podcast_query <QUERY>
+    $p = .\test\format_podcast_query $r
+    .\test\show_podcasts.ps1 -Podcasts $p
 
     .EXAMPLE
 
-    <PATH>\show_podcasts.ps1 -Podcasts $(<PATH>\search_podcasts.ps1 -Title "npr") -HighlightTitleMatches
+    $h = .\test\get_podcasts_hashtables <QUERY>
+    .\test\show_podcasts.ps1 -Podcasts $h.podcasts
 
 #>
 [CmdletBinding()]
 param (
     [Parameter(Mandatory)]
-    [ValidateScript({ $_.keys -contains "query" -and $_.keys -contains "response" -and $_.keys -contains "data" })]
-    [PSCustomObject]
-    $Podcasts,
-    [Parameter()]
-    [switch]
-    $HighlightTitleMatches
+    [ValidateScript({ $null -ne $_ -and $_.count -gt 0 })]
+    [object[]]
+    $Podcasts
 )
 begin {}
 process {
-    $escape = [char]27
-    $highlight = $($escape + "[93m")
-    $dark = $($escape + "[2m")
-    $reset = $($escape + "[0m")
-    $Podcasts.data | Format-List -Property @{
-        Label      = "Result";
-        Expression = { 
-            if ($_.title -imatch $Podcasts.query -and $HighlightTitleMatches) { $highlight + [array]::IndexOf($Podcasts.data, $_) + $reset }
-            elseif ([array]::IndexOf($Podcasts.data, $_) % 2 -eq 0) { $dark + [array]::IndexOf($Podcasts.data, $_) + $reset }
-            else { [array]::IndexOf($Podcasts.data, $_) } };
-    }, @{
-        Label      = "Podcasts for '$($Podcasts.query)'";
-        Expression = { 
-            if ($_.title -imatch $Podcasts.query -and $HighlightTitleMatches) { $highlight + $_.title + $reset }
-            elseif ([array]::IndexOf($Podcasts.data, $_) % 2 -eq 0) { $dark + $_.title + $reset }
-            else { $_.title } };
-    }, @{
-        Label      = "Description";
-        Expression = { 
-            if ($_.title -imatch $Podcasts.query -and $HighlightTitleMatches) { $highlight + $_.description + $reset } 
-            elseif ([array]::IndexOf($Podcasts.data, $_) % 2 -eq 0) { $dark + $_.description + $reset } 
-            else { $_.description } };
-    }, @{
-        Label      = "RSS";
-        Expression = { 
-            if ($_.title -imatch $Podcasts.query -and $HighlightTitleMatches) { $highlight + $_.url + $reset } 
-            elseif ([array]::IndexOf($Podcasts.data, $_) % 2 -eq 0) { $dark + $_.url + $reset } 
-            else { $_.url } };
-    }
+    $script:index = 0; 
+    $Podcasts | select-Object -Property @{n = "#"; e = { ($script:index++) } }, author, title
 }
 end {}

@@ -1,5 +1,11 @@
 <#
 
+DEPRECATED
+
+TODO far too complicated; use defaults and add any desired extras prior save for only podcast
+TODO episodes should have their own file
+TODO $config.podcasts <TITLE> provides the path ... but should enforce a special rule to ensure filesystem compatibility for title name
+
 .SYNOPSIS
 
 Convert podcast web response information to latest storage scheme.
