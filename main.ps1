@@ -1,5 +1,9 @@
 <#
 
+TODO Investigate use of Start-Process or Invoke-Expression to start new instance each time to prevent constants nuisance.
+TODO Start-Process pwsh -ArgumentList '-noexit -command <script>
+TODO Invoke-Expression 'cmd /c start pwsh -Command <script>
+
 .SYNOPSIS
 
 Main entry point for PowerShell Podcasts.

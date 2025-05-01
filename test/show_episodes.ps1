@@ -15,6 +15,7 @@ $e = $([xml] $e.Content).rss.channel.item[#]
 [CmdletBinding()]
 param (
     [Parameter(Mandatory)]
+    [ValidateScript({ ![string]::IsNullOrEmpty($_.pubDate) -and ![string]::IsNullOrEmpty($_.title) })]
     [object[]] $Episodes,
     [Parameter()]
     [Int16] $First = 5
@@ -24,8 +25,8 @@ process {
     $script:index = 0; 
     $Episodes | select-Object -Property `
     @{n = "item"; e = { ($script:index++) } }, `
-    @{n = "date"; e = { ([datetime]$_.pubdate) } }, `
-    title `
+    @{n = "date"; e = { ([datetime]$_.pubDate) } }, `
+        title `
         -First $First
 }
 end { }

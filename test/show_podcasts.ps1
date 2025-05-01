@@ -2,11 +2,11 @@
 
     .SYNOPSIS
 
-    Show compact results from podcast query.
+    Show compact results from podcast query or array.
 
     .PARAMETER Podcasts
 
-    Output from format_podcast_query.
+    Output from format_podcast_query or podcasts file.
 
     .EXAMPLE
 
@@ -16,14 +16,18 @@
 
     .EXAMPLE
 
-    $h = .\test\get_podcasts_hashtables <QUERY>
-    .\test\show_podcasts.ps1 -Podcasts $h.podcasts
+    $q = .\test\get_podcasts_hashtables <QUERY>
+    .\test\show_podcasts.ps1 -Podcasts $q.podcasts
+
+    .EXAMPLE
+    $p = get-content -path .\src\podcasts
+    .\test\show_podcasts.ps1 -Podcasts $p
 
 #>
 [CmdletBinding()]
 param (
     [Parameter(Mandatory)]
-    [ValidateScript({ $null -ne $_ -and $_.count -gt 0 })]
+    [ValidateScript({ $null -ne $_ -and $_.count -gt 0 -and ![string]::IsNullOrEmpty($_.author) -and ![string]::IsNullOrEmpty($_.title) })]
     [object[]]
     $Podcasts
 )

@@ -1,4 +1,24 @@
 <!-- 
+
+
+
+TODO elsewhere:
+    - search for podcast by name
+        - add podcast
+    - remove podcast
+
+TODO elsewhere
+- thumbnail handling (move, download, etc)
+- access podcast info in job (folder, thumbnail, episodes)
+    - get podcast episode
+        - play podcast episode
+            - stream podcast episode
+            - download podcast episode
+
+
+
+
+
 .SYNOPSIS
 README for PowerShell Podcast project.
 
