@@ -213,8 +213,8 @@ response content, and 'podcast' which was the provided podcast.
 function invoke_podcast_episodes {
     param (
         [Parameter(Mandatory, Position = 0)]
-        [ValidateScript({ $null -ne $_ -and $_.keys -contains 'author' -contains 'description' -contains 'image' -contains 'title' -contains 'url' })]
-        [hashtable] $Podcast
+        [ValidateScript({ ($_ | Get-Member -MemberType Properties).Name -contains 'author' -contains 'description' -contains 'image' -contains 'title' -contains 'url' })]
+        [pscustomobject] $Podcast
     )
     begin {
         $r = invoke_podcast_url $Podcast

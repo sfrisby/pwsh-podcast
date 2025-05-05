@@ -92,7 +92,7 @@ begin {
         }
     }
 
-    function save-podcastdirectory {
+    function save_local {
         save_container $LOCAL_PATH
     }
     function confirm_local {
@@ -100,7 +100,7 @@ begin {
             $config.local = $LOCAL_PATH
         }
         if (!(confirm_container $config.local)) {
-            save-podcastdirectory
+            save_local
         }
     }
     <#
@@ -119,7 +119,7 @@ begin {
     podcast inforamtion storage.
 
     #>
-    function get-RssJsonTitles {
+    function get_deprecated_rss {
         $podcasts = @()
         $rssjson = (Get-ChildItem -Recurse -Filter "rss.json").FullName
         if (![String]::IsNullOrEmpty($rssjson)) {
@@ -150,7 +150,7 @@ begin {
             }
         }
         else {
-            $pastpodcasts = get-RssJsonTitles
+            $pastpodcasts = get_deprecated_rss
             $pastpodcasts | ForEach-Object {
                 if (!($Podcasts.title -icontains $_.title)) {
                     $Podcasts += $_

@@ -6,22 +6,16 @@
 
 .EXAMPLE
 
-. .\src\utilities.ps1
+providing a script block allows setup!
 
-$configuration[0].count # 24
-$q = invoke_podcasts "the foreign report" # provides single result
-$configuration[0] += $q.podcasts[0]
-$configuration[0].count # 25
-$configuration[0] | convertto-json -depth 6 | out-file .\src\podcasts
-
-\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-run setup.ps1, i.e. '$configuration = .\src\setup.ps1' OR re-run launch.ps1
-///////////////////////////////////////////////////////////////////////////
-
-. .\src\utilities.ps1
-$configuration[0].count # 25
-$configuration[0][24]
-$e = invoke_podcast_episodes ($configuration[0][24] | ConvertTo-Json | ConvertFrom-Json -AsHashtable)
+get episodes based on the podcast title (case insensitive):
+    > invoke_podcast_episodes ($configuration[0] | where-object {$_.title -imatch <TITLE>} )
 
 #>
-Start-Process pwsh -WorkingDirectory $(Join-Path $PSScriptRoot ".." ".") -ArgumentList "-NoExit", "-Command `"New-Variable -Name configuration (.\src\setup.ps1)`""
+$cmd = {
+    $Host.UI.RawUI.WindowTitle = 'pwsh podcasts';
+    New-Variable -Name configuration (.\src\setup.ps1);
+    .\test\show_podcasts.ps1 $configuration[0];
+    . .\src\utilities.ps1;
+}
+Start-Process pwsh -WorkingDirectory $(Join-Path $PSScriptRoot ".." ".") -WindowStyle Maximized -ArgumentList "-NoExit", "-Command `"$($cmd)`"";

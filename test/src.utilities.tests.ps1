@@ -133,7 +133,7 @@ Describe "invoke_podcasts" {
 
 Describe "invoke_podcast_episodes" {
     BeforeAll {
-        $script:p = @{
+        $script:p = [pscustomobject]@{
             title       = "pbs news hour mock";
             author      = 'pbs';
             url         = "https://www.pbs.org/newshour/feeds/rss/podcasts/show";
@@ -164,7 +164,7 @@ Describe "invoke_podcast_episodes" {
     }
     It "confirms types" {
         $e.episodes.gettype() -eq [System.Object[]] | Should -BeTrue
-        $e.podcast.gettype() -eq [hashtable] | should -BeTrue
+        $e.podcast.gettype() -eq  [pscustomobject]::new().gettype() | should -BeTrue
     }
     It "confirms array elements type" {
         $e.episodes | foreach-object {
