@@ -78,8 +78,7 @@ function invoke_podcast_url {
         [pscustomobject]
         $Podcast
     )
-    $r = Invoke-WebRequest -Uri $Podcast.url -Method Get -ContentType "application/json"
-    $r
+    Invoke-WebRequest -Uri $Podcast.url -Method Get -ContentType "application/json"
 }
 <#
 
@@ -104,8 +103,7 @@ function format_podcast_url {
         [ValidateScript({ ![string]::IsNullOrEmpty($_.Content ) })]
         [Microsoft.PowerShell.Commands.WebResponseObject] $Response
     )
-    $c = $Response.Content -replace '&rsquo;', "'" -replace '&#8211;', "-"
-    $c
+    $Response.Content -replace '&rsquo;', "'" -replace '&#8211;', "-"
 }
 <#
 
@@ -132,6 +130,12 @@ Inspired from https://github.com/Phil-Factor/PowerShell-Utility-Cmdlets/blob/mai
 .OUTPUTS
 
 Array of hashtables for each podcast episode (if any).
+
+.FUNCTIONALITY
+
+slow due to string processing - seperate jobs doesn't help it be faster ...
+
+just pulling the rss feed might be best for jobs and may due within 'foreach-object -parallel'
 
 #>
 function format_podcast_content {
@@ -207,7 +211,11 @@ As of v7.3, using -asHashTable returns type OrderedHashtable:
 
 A hashtable with the keys 'episodes' for the episodes of the provided podcast, 
 'response' for the web request info, 'content' containing the formatted web 
-response content, and 'podcast' which was the provided podcast.
+response content, and 'podcast' which was the provided podcast. If any errors 
+are encountered then an additional key, 'errors', will be added to the hashtable.
+
+Depending on when the error occurs, the other key members (except 'podcast' as 
+it is provided) may be empty.
 
 #>
 function invoke_podcast_episodes {
@@ -217,12 +225,19 @@ function invoke_podcast_episodes {
         [pscustomobject] $Podcast
     )
     begin {
-        $r = invoke_podcast_url $Podcast
-        $c = format_podcast_url $r
-        $e = format_podcast_content $c
+        try {
+            $r = invoke_podcast_url $Podcast
+            $c = format_podcast_url $r
+            $e = format_podcast_content $c
+        } catch {
+            $i = $_
+        }
     }
     process {
         $o = @{ episodes = $e; response = $r; content = $c; podcast = $Podcast }
+        if (![string]::IsNullOrEmpty($i)) {
+            $o.Add('errors', $i)
+        }
     }
     end {
         return $o

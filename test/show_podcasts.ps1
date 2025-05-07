@@ -23,6 +23,9 @@
     $p = get-content -path .\src\podcasts
     .\test\show_podcasts.ps1 -Podcasts $p
 
+    .EXAMPLE
+    .\test\show_podcasts.ps1 $pulled.podcast
+
 #>
 [CmdletBinding()]
 param (

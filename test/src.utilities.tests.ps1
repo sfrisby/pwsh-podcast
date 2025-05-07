@@ -132,43 +132,52 @@ Describe "invoke_podcasts" {
 }
 
 Describe "invoke_podcast_episodes" {
-    BeforeAll {
-        $script:p = [pscustomobject]@{
-            title       = "pbs news hour mock";
-            author      = 'pbs';
-            url         = "https://www.pbs.org/newshour/feeds/rss/podcasts/show";
-            description = "mock of pbs podcast item"
-            image       = "https://image.pbs.org/contentchannels/k1Gwt8I-show-poster2x3-EWWT8oy.jpg?format=webp&crop=227x340"
+    context "pbs mocks" {
+        BeforeAll {
+            $script:p = [pscustomobject]@{
+                title       = "pbs news hour mock";
+                author      = 'pbs';
+                url         = "https://www.pbs.org/newshour/feeds/rss/podcasts/show";
+                description = "mock of pbs podcast item"
+                image       = "https://image.pbs.org/contentchannels/k1Gwt8I-show-poster2x3-EWWT8oy.jpg?format=webp&crop=227x340"
+            }
+            $script:e = $(invoke_podcast_episodes $p)
         }
-        $script:e = $(invoke_podcast_episodes $p)
-    }
-    Context "invoke_podcast_url" {
-        It "confirms unchanged response content" {
+        It "invoke_podcast_url confirms unchanged response content" {
             $e.response.gettype() -eq [Microsoft.PowerShell.Commands.BasicHtmlWebResponseObject]
             $e.response.content.gettype() -eq [string] | should -BeTrue
             $e.response.content.contains('&rsquo;') | should -BeTrue
             $e.response.content.contains('&#8211;') | should -BeTrue
         }
-    }
-    Context "format_podcast_url" {
-        It "confirms changed response content" {
+        It "format_podcast_url confirms changed response content" {
             $e.content.gettype() -eq [string] | should -BeTrue
             $e.content.contains('&rsquo;') | should -BeFalse
             $e.content.contains('&#8211;') | should -BeFalse
         }
-    }
-    Context "format_podcast_content" {
-        $e.episodes | foreach-object {
-            $_.description -contains "’" | Should -BeFalse
+        It "checks format_podcast_content" {
+            $e.episodes | foreach-object {
+                $_.description -contains "’" | Should -BeFalse
+            }
+        }
+        It "confirms types" {
+            $e.episodes.gettype() -eq [System.Object[]] | Should -BeTrue
+            $e.podcast.gettype() -eq  [pscustomobject]::new().gettype() | should -BeTrue
+        }
+        It "confirms array elements type" {
+            $e.episodes | foreach-object {
+                $_.gettype() -eq [hashtable] | Should -BeTrue
+            }
         }
     }
-    It "confirms types" {
-        $e.episodes.gettype() -eq [System.Object[]] | Should -BeTrue
-        $e.podcast.gettype() -eq  [pscustomobject]::new().gettype() | should -BeTrue
-    }
-    It "confirms array elements type" {
-        $e.episodes | foreach-object {
-            $_.gettype() -eq [hashtable] | Should -BeTrue
+    It "confirms error handling" {
+        $invalid = [pscustomobject] @{
+            title       = "invalid podcast mock";
+            author      = 'invalid team';
+            url         = "https://feeds.extinct.invalid.nobueno.com/fakenews";
+            description = "mock of invalid podcast"
         }
+        $out = invoke_podcast_episodes $invalid
+        $out.errors.gettype() -eq [System.Management.Automation.ErrorRecord] | Should -BeTrue
+        $out.gettype() -eq [hashtable]
     }
 }

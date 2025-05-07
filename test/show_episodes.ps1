@@ -21,7 +21,7 @@ param (
     [Int16] $First = 5
 )
 begin { }
-process { 
+process {
     $script:index = 0; 
     $Episodes | select-Object -Property `
     @{n = "item"; e = { ($script:index++) } }, `
