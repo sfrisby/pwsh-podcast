@@ -1,7 +1,18 @@
-Describe "episodes.ps1" {
+<#
+
+.SYNOPSIS
+
+Providing array [object[]] returns the array with 'episodes' as a new member for each element.
+
+.NOTES
+
+Any errors that occur will be contained within the new member.
+
+#>
+Describe "invoke_then_format_podcasts_episodes.ps1" {
     BeforeAll {
         $script:root = $PSCommandPath | Split-Path -Parent | Split-Path -Parent
-        $script:run = Join-Path $root "src" "episodes.ps1"
+        $script:run = Join-Path $root "src" "invoke_then_format_podcasts_episodes.ps1"
     }
     context "multiple valid podcasts" {
         BeforeAll {
@@ -31,15 +42,18 @@ Describe "episodes.ps1" {
             $script:out.gettype() -eq [object[]] | should -BeTrue
         }
         It "confirms first mock podcast info" {
-            $script:out[0].podcast.title | Should -BeExactly 'pbs news hour mock'
+            $script:out[0].title | Should -BeExactly 'pbs news hour mock'
+            $script:out[0].episodes.gettype() -eq [object[]] | should -BeTrue
             $script:out[0].episodes[0].gettype() -eq [hashtable] | should -BeTrue
         }
         It "confirms second mock podcast info" {
-            $script:out[1].podcast.title | Should -BeExactly 'npr polictics podcast mock'
+            $script:out[1].title | Should -BeExactly 'npr polictics podcast mock'
+            $script:out[1].episodes.gettype() -eq [object[]] | should -BeTrue
             $script:out[1].episodes[0].gettype() -eq [hashtable] | should -BeTrue
         }
         It "confirms last mock podcast info" {
-            $script:out[2].podcast.title | Should -BeExactly 'se-radio podcast mock'
+            $script:out[2].title | Should -BeExactly 'se-radio podcast mock'
+            $script:out[2].episodes.gettype() -eq [object[]] | should -BeTrue
             $script:out[2].episodes[0].gettype() -eq [hashtable] | should -BeTrue
         }
     }
@@ -60,14 +74,16 @@ Describe "episodes.ps1" {
         }
         It "confirms single invalid podcast job handling" {
             $out = & $script:run @($invalid0)
-            $out.gettype() -eq [hashtable]
-            $out.errors.gettype() -eq [System.Management.Automation.ErrorRecord]
+            $out.gettype() -eq [pscustomobject]::new().gettype() | should -BeTrue
+            $out.episodes.gettype() -eq [System.Management.Automation.ErrorRecord] | should -BeTrue
+            # episodes gets added so remove before next test
+            $invalid0.PSObject.Properties.Remove('episodes')
         }
         It "confirms multiple invalid podcast job handling" {
             $out = & $script:run @($invalid0, $invalid1)
             $out.gettype() -eq [object[]] 
-            $out[0].errors.gettype() -eq [System.Management.Automation.ErrorRecord]
-            $out[1].errors.gettype() -eq [System.Management.Automation.ErrorRecord]
+            $out[0].episodes.gettype() -eq [System.Management.Automation.ErrorRecord] | should -BeTrue
+            $out[1].episodes.gettype() -eq [System.Management.Automation.ErrorRecord] | should -BeTrue
         }
     }
 }

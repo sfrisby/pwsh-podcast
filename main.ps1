@@ -1,5 +1,9 @@
 <#
 
+$podcasts.episodes.title -imatch "&" -imatch ";"
+
+$podcast_index_by_title = $pulled.indexof(($pulled | Where-Object { $_.title -imatch "<TITLE>" }))
+
 launch a shell with podcasts?
 - setup
 - configuration
@@ -11,8 +15,7 @@ $r = ($pulled | Where-Object { $_.podcast.title -imatch "<NAME>"})
 .\test\show_episodes $r.episodes
 $e = .\test\invoke_brave_download.ps1 -Podcast $r.podcast -Episode $r.episodes[1]
 
-cleanup
-    > Get-ChildItem -Path .\.pwshpodcasts\<PODCAST> -Recurse -Filter '*.mp3' | Remove-Item
+cleanup MP3s: Get-ChildItem -Path .\.pwshpodcasts\<PODCAST> -Recurse -Filter '*.mp3' | Remove-Item
 
 Index to simplify latest episoderetreival, i.e. index:
 $i = #
