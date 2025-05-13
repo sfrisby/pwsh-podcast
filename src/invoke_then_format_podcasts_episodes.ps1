@@ -2,22 +2,33 @@
 
 .SYNOPSIS
 
-Obtain episodes for each podcast in parallel. Format xml items to hashtable element.
+Obtain episodes for each podcast in parallel. Format XML to custom object element.
 
 .OUTPUTS
 
-New 'episodes' member is a [object[]]  where each element is a single episode [hashtable].
+All episodes for all podcasts in a single array.
 
-~ 5 seconds for 24 podcasts.
+Only interested in podcast title, episode title, episode date, episode url, episode or podcast author, and episode description.
+
+Measured roughly 3 seconds for 14637 episodes from 24 podcasts.
 
 .NOTES
 
-Inspired from https://github.com/Phil-Factor/PowerShell-Utility-Cmdlets/blob/main/ConvertFrom-XML/ConvertFrom-XML.ps1
+Progress shown as a percentage of per Podcast episodes gathered.
 
-[System.Web.HttpUtility]::HtmlDecode
-- replaces &rsquo; with fat quote; '’'
-- replaces &#8211; with fat hyphen; '–'
-`- so replacing findings within string content directly, i.e. [-replace '&rsquo;', "'" -replace '&#8211;', "-"]
+XML cast will insert fat quotes into title '’', as well as '&#8211;'. Replacing upon assignment.
+
+Using '-parallel' for each XML item negatively impacts performance.
+
+.EXAMPLE
+
+Showing the 10 most recent episodes and download the latest:
+
+$podcasts = .\src\invoke_then_format_podcasts_episodes.ps1 $configuration[0]
+
+$e = $podcasts | Select-Object -Property @{n = "date"; e = { [datetime] $_.date }}, title, podcast | Sort-Object -Property date -Descending | select -First 10
+
+.\test\invoke_brave_download.ps1 ($podcasts | where-Object { $_.title -eq $e[0].title })
 
 #>
 [CmdletBinding()]
@@ -25,8 +36,11 @@ param (
     [parameter(Mandatory, Position = 0)]
     [ValidateScript({
             $_ | ForEach-Object {
-                if ($null -ne $_.episodes) {
-                    throw [System.Management.Automation.PropertyNotFoundException] "Episodes member for '$($_.title)' already exist."
+                if ([string]::IsNullOrEmpty($_.title)) {
+                    throw [System.Management.Automation.PropertyNotFoundException] "Podcast title missing."
+                }
+                if ([string]::IsNullOrEmpty($_.url)) {
+                    throw [System.Management.Automation.PropertyNotFoundException] "Podcast url missing."
                 }
             }
             $true
@@ -36,34 +50,71 @@ param (
 $total = $Podcasts.Count
 $index = @{i = 0 }
 $progress = [System.Collections.Hashtable]::Synchronized($index)
-$Podcasts | ForEach-Object -Parallel {
+$e = $Podcasts | ForEach-Object -Parallel {
+    $p = $using:progress
+    $podcast_title = $_.title
+    $podcast_author = $_.author
     try {
-        $progress_item = $using:progress
-        $e = @()
-        $tmp = [xml] $($(Invoke-WebRequest -Uri $_.url -Method Get -ContentType "application/json").Content -replace '&rsquo;', "'" -replace '&#8211;', "-")
+        $tmp = $([xml]$(Invoke-WebRequest -Uri $_.url -Method Get -ContentType "application/json").Content)
         $tmp.rss.channel.item | ForEach-Object {
-            $item = @{}
-            $_.get_childnodes() | ForEach-Object {
-                if ($_.get_attributes().count -gt 0) {
-                    $a = @{}
-                    $_.get_attributes() | ForEach-Object {
-                        $a[$_.get_localname()] = $_.get_innertext()
-                    }
-                    $item[$_.get_localname()] = $a
+            $title = "Unknown episode title"
+            if ($null -ne $_.title) {
+                $titletype = $_.title.gettype()
+                if ($titletype -eq [System.Xml.XmlElement]) {
+                    $title = $_.title.innertext
                 }
-                else {
-                    $item[$_.get_localname()] = $_.get_innertext()
+                elseif ($titletype -eq [string]) {
+                    $title = $_.title
+                }
+                elseif ($titletype -eq [object[]]) {
+                    $title = $_.title[0]
                 }
             }
-            $e += @($item)
+            $author = $podcast_author
+            if ($null -ne $_.author) {
+                $authortype = $_.author.gettype()
+                if ($authortype -eq [System.Xml.XmlElement]) {
+                    $author = $_.author.innertext
+                }
+                elseif ($authortype -eq [string]) {
+                    $author = $_.author
+                }
+                elseif ($authortype -eq [object[]]) {
+                    $author = $_.author[0]
+                }
+            }
+            $description = [System.Web.HttpUtility]::HtmlDecode($_.encoded)
+            if ($null -ne $_.description) {
+                $descriptiontype = $_.description.gettype()
+                if ($descriptiontype -eq [System.Xml.XmlElement]) {
+                    $description = [System.Web.HttpUtility]::HtmlDecode($_.description.innertext)
+                }
+                elseif ($descriptiontype -eq [string]) {
+                    $description = [System.Web.HttpUtility]::HtmlDecode($_.description)
+                }
+                elseif ($descriptiontype -eq [object[]]) {
+                    $description = [System.Web.HttpUtility]::HtmlDecode($_.description[0])
+                }
+            }
+            [PSCustomObject]@{
+                author      = $author
+                date        = $_.pubDate
+                description = $description
+                podcast     = $podcast_title
+                title       = ($title -replace '&#8211;', "-" -replace "’", "'")
+                url         = $_.enclosure.url
+            }
         }
     }
     catch {
-        $e = $_
+        [PSCustomObject]@{
+            podcast = $podcast_title
+            error   = $_
+        }
     }
-    $_ | Add-Member -MemberType NoteProperty -Name "episodes" -Value $e
-    $progress_item.i++
-    Write-Host "`rLoading all podcast episodes: $(100 * ($progress_item.i / $using:total))%" -NoNewLine
+    $p.i++
+    Write-Host "`rLoading all podcast episodes: $(100 * ($p.i / $using:total))%" -NoNewLine
 }
 Write-Host ""
-$Podcasts
+
+$e

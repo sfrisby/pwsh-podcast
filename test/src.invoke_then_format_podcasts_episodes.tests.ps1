@@ -2,11 +2,11 @@
 
 .SYNOPSIS
 
-Providing array [object[]] returns the array with 'episodes' as a new member for each element.
+Episodes order is no longer guaranteed. Searching and sorting required.
 
 .NOTES
 
-Any errors that occur will be contained within the new member.
+Any errors that occur will be contained within an 'error' property with the podcast title.
 
 #>
 Describe "invoke_then_format_podcasts_episodes.ps1" {
@@ -20,13 +20,13 @@ Describe "invoke_then_format_podcasts_episodes.ps1" {
                 title       = "pbs news hour mock";
                 author      = 'pbs';
                 url         = "https://www.pbs.org/newshour/feeds/rss/podcasts/show";
-                description = "mock of pbs podcast item"
+                description = "mock of pbs podcast"
             }
             $script:p1 = [pscustomobject]@{
                 title       = "npr polictics podcast mock";
                 author      = 'npr';
                 url         = "https://feeds.npr.org/510310/podcast.xml";
-                description = "mock of pbs podcast item"
+                description = "mock of npr podcast"
             }
             $script:p2 = [pscustomobject]@{
                 title       = "se-radio podcast mock";
@@ -34,27 +34,32 @@ Describe "invoke_then_format_podcasts_episodes.ps1" {
                 url         = "https://feeds.feedburner.com/se-radio";
                 description = "mock of software engineering radio podcast"
             }
-            $script:podcasts = @($p0, $p1, $p2)
-            $script:out = @()
+            $script:podcasts = @($script:p0, $script:p1, $script:p2)
+            $script:out = & $script:run $script:podcasts
         }
         It "executes thread episodes script and confirms job output" {
-            $script:out = & $script:run $podcasts
             $script:out.gettype() -eq [object[]] | should -BeTrue
         }
         It "confirms first mock podcast info" {
-            $script:out[0].title | Should -BeExactly 'pbs news hour mock'
-            $script:out[0].episodes.gettype() -eq [object[]] | should -BeTrue
-            $script:out[0].episodes[0].gettype() -eq [hashtable] | should -BeTrue
+            $t = $script:out | Where-Object { $_.podcast -eq 'pbs news hour mock' }
+            $t.gettype() -eq [object[]] | should -BeTrue
+            $t | ForEach-Object {
+                $_.gettype() -eq [pscustomobject]::new().gettype() | should -BeTrue
+            }
         }
         It "confirms second mock podcast info" {
-            $script:out[1].title | Should -BeExactly 'npr polictics podcast mock'
-            $script:out[1].episodes.gettype() -eq [object[]] | should -BeTrue
-            $script:out[1].episodes[0].gettype() -eq [hashtable] | should -BeTrue
+            $t = $script:out | Where-Object { $_.podcast -eq 'npr polictics podcast mock' }
+            $t.gettype() -eq [object[]] | should -BeTrue
+            $t | ForEach-Object {
+                $_.gettype() -eq [pscustomobject]::new().gettype() | should -BeTrue
+            }
         }
         It "confirms last mock podcast info" {
-            $script:out[2].title | Should -BeExactly 'se-radio podcast mock'
-            $script:out[2].episodes.gettype() -eq [object[]] | should -BeTrue
-            $script:out[2].episodes[0].gettype() -eq [hashtable] | should -BeTrue
+            $t = $script:out | Where-Object { $_.podcast -eq 'se-radio podcast mock' }
+            $t.gettype() -eq [object[]] | should -BeTrue
+            $t | ForEach-Object {
+                $_.gettype() -eq [pscustomobject]::new().gettype() | should -BeTrue
+            }
         }
     }
     context "invalid podcasts handling" {
@@ -73,17 +78,24 @@ Describe "invoke_then_format_podcasts_episodes.ps1" {
             }
         }
         It "confirms single invalid podcast job handling" {
-            $out = & $script:run @($invalid0)
-            $out.gettype() -eq [pscustomobject]::new().gettype() | should -BeTrue
-            $out.episodes.gettype() -eq [System.Management.Automation.ErrorRecord] | should -BeTrue
-            # episodes gets added so remove before next test
-            $invalid0.PSObject.Properties.Remove('episodes')
+            $t = & $script:run @($invalid0)
+            $t.gettype() -eq [pscustomobject]::new().gettype() | should -BeTrue
+            [string]::IsNullOrEmpty($t.podcast) | should -BeFalse
+            $t.error.gettype() -eq [System.Management.Automation.ErrorRecord] | should -BeTrue
         }
         It "confirms multiple invalid podcast job handling" {
-            $out = & $script:run @($invalid0, $invalid1)
-            $out.gettype() -eq [object[]] 
-            $out[0].episodes.gettype() -eq [System.Management.Automation.ErrorRecord] | should -BeTrue
-            $out[1].episodes.gettype() -eq [System.Management.Automation.ErrorRecord] | should -BeTrue
+            $t = & $script:run @($invalid0, $invalid1)
+            $t.gettype() -eq [object[]]
+
+            $p = $t | Where-Object { $_.podcast -eq 'invalid podcast mock' }
+            $p.gettype() -eq [pscustomobject]::new().gettype() | should -BeTrue
+            [string]::IsNullOrEmpty($p.podcast) | should -BeFalse
+            $p.error.gettype() -eq [System.Management.Automation.ErrorRecord] | should -BeTrue
+
+            $p = $t | Where-Object { $_.podcast -eq 'second invalid podcast mock' }
+            $p.gettype() -eq [pscustomobject]::new().gettype() | should -BeTrue
+            [string]::IsNullOrEmpty($p.podcast) | should -BeFalse
+            $p.error.gettype() -eq [System.Management.Automation.ErrorRecord] | should -BeTrue
         }
     }
 }
