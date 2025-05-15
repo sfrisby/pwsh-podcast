@@ -1,0 +1,56 @@
+<!--
+    XAML attributes that are incompatible with PowerShell: 
+        xmlns:mc
+        xmlns:local
+        mc:Ignorable
+
+    The x:Class attribute is used for code-behind files in a compiled WPF application.
+
+    Unclear why XAML Studio complains about Title property.
+-->
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="The Title of the Window (taskbar)">
+    <Grid>
+        <DockPanel Name="navbar" Background="#990077ff" VerticalAlignment="Top" HorizontalAlignment="Stretch"> <!-- #0077ff -->
+            <TextBlock Text="Here is a text block" HorizontalAlignment="Left" VerticalAlignment="Center" />
+            <Button Name="navbar_close" Content=" X " HorizontalAlignment="Right" />
+        </DockPanel>
+        <!-- <StackPanel Height="100px">
+            <Button>
+            <Button.ContextMenu>
+                <ContextMenu>
+                <MenuItem Header="1">First item</MenuItem>
+                <MenuItem Header="2">Second item</MenuItem>
+                </ContextMenu>
+            </Button.ContextMenu>
+            A cool button for sure
+            </Button>
+            <Button>
+            <Button.ContextMenu>
+                <ContextMenu>
+                <MenuItem Header="11">First item</MenuItem>
+                <MenuItem Header="22">Second item</MenuItem>
+                </ContextMenu>
+            </Button.ContextMenu>
+            Another cool button
+            </Button>
+        </StackPanel> -->
+        <!-- <Button>
+            <Button.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="1">First item</MenuItem>
+                    <MenuItem Header="2">Second item</MenuItem>
+                </ContextMenu>
+            </Button.ContextMenu>
+            A cool button for sure </Button>
+        <Button>
+            <Button.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="11">First item</MenuItem>
+                    <MenuItem Header="22">Second item</MenuItem>
+                </ContextMenu>
+            </Button.ContextMenu>
+            Another cool button </Button> -->
+    </Grid>
+</Window>

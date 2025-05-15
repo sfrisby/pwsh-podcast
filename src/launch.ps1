@@ -10,9 +10,25 @@ Providing a script block allows setup!
 
 The working directory is set to the root folder which is where the command block uses relative paths from.
 
-$podcasts | Select-Object -Property @{n = "published"; e = { [datetime] $_.date }}, title, podcast | Sort-Object -Property date -Descending | select -First 20
+.EXAMPLE
 
-$url = $podcasts | Where-Object { $_.title -eq "<EXACT TITLE>"}
+Sorting latest episodes and displaying their index:
+
+    $script:latestindex = 0; $latest = $podcasts | Select-Object -Property @{n = "index"; e = { $script:latestindex++ } @{n = "date"; e = { [datetime] $_.date }}, title, podcast | Sort-Object -Property date -Descending | select -First <AMOUNT>
+
+    $latest
+
+Selecting an episode from the latest episodes:
+
+    $episode = $podcasts | Where-Object { $_.title -eq $latest[<LATESTINDEX>].title }
+
+Downloading the file via brave link:
+
+    $file = .\test\invoke_brave_download.ps1 $episode
+
+Playing (then exit) the file via VLC at 1.5 times the normal playback speed:
+
+    & $configuration[1].vlc $file --rate 1.5 --play-and-exit
 
 #>
 $cmd = {

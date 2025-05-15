@@ -6,15 +6,18 @@ Obtain episodes for each podcast in parallel. Format XML to custom object elemen
 
 .OUTPUTS
 
-All episodes for all podcasts in a single array.
+All episodes for all podcasts contained in an [object[]]. 
+Each element will be a single episode containing the podcasts title, the episode
+title, the episode date, the episodes url, the author (episode or podcast) and 
+the episode description.
 
-Only interested in podcast title, episode title, episode date, episode url, episode or podcast author, and episode description.
+.BENCHMARK
 
 Measured roughly 3 seconds for 14637 episodes from 24 podcasts.
 
 .NOTES
 
-Progress shown as a percentage of per Podcast episodes gathered.
+Progress shown as a percentage of total Podcast episodes gathered.
 
 XML cast will insert fat quotes into title '’', as well as '&#8211;'. Replacing upon assignment.
 
@@ -22,13 +25,11 @@ Using '-parallel' for each XML item negatively impacts performance.
 
 .EXAMPLE
 
-Showing the 10 most recent episodes and download the latest:
+Display the 10 most recent episodes from all podcasts:
 
-$podcasts = .\src\invoke_then_format_podcasts_episodes.ps1 $configuration[0]
+    $podcasts = .\src\invoke_then_format_podcasts_episodes.ps1 <PODCASTS [OBJECT[]]>
 
-$e = $podcasts | Select-Object -Property @{n = "date"; e = { [datetime] $_.date }}, title, podcast | Sort-Object -Property date -Descending | select -First 10
-
-.\test\invoke_brave_download.ps1 ($podcasts | where-Object { $_.title -eq $e[0].title })
+    $podcasts | Select-Object -Property @{n = "date"; e = { [datetime] $_.date }}, title, podcast | Sort-Object -Property date -Descending | select -First 10
 
 #>
 [CmdletBinding()]
@@ -37,21 +38,21 @@ param (
     [ValidateScript({
             $_ | ForEach-Object {
                 if ([string]::IsNullOrEmpty($_.title)) {
-                    throw [System.Management.Automation.PropertyNotFoundException] "Podcast title missing."
+                    throw [System.Management.Automation.PropertyNotFoundException] "Property 'title' was missing from a podcast ~ $($_)."
                 }
                 if ([string]::IsNullOrEmpty($_.url)) {
-                    throw [System.Management.Automation.PropertyNotFoundException] "Podcast url missing."
+                    throw [System.Management.Automation.PropertyNotFoundException] "Property 'url' was missing from a podcast ~ $($_)."
                 }
             }
             $true
         })]
     [object[]] $Podcasts
 )
-$total = $Podcasts.Count
+$script:podcast_total = $Podcasts.Count
 $index = @{i = 0 }
 $progress = [System.Collections.Hashtable]::Synchronized($index)
-$e = $Podcasts | ForEach-Object -Parallel {
-    $p = $using:progress
+$episodes = $Podcasts | ForEach-Object -Parallel {
+    $podcast_count = $using:progress
     $podcast_title = $_.title
     $podcast_author = $_.author
     try {
@@ -112,9 +113,9 @@ $e = $Podcasts | ForEach-Object -Parallel {
             error   = $_
         }
     }
-    $p.i++
-    Write-Host "`rLoading all podcast episodes: $(100 * ($p.i / $using:total))%" -NoNewLine
+    $podcast_count.i++
+    Write-Host "`rLoading all podcast episodes: $(100 * ($podcast_count.i / $using:podcast_total))%" -NoNewLine
 }
 Write-Host ""
 
-$e
+$episodes
