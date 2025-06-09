@@ -14,7 +14,7 @@ The working directory is set to the root folder which is where the command block
 
 Sorting latest episodes and displaying their index:
 
-    $script:latestindex = 0; $latest = $podcasts | Select-Object -Property @{n = "index"; e = { $script:latestindex++ } @{n = "date"; e = { [datetime] $_.date }}, title, podcast | Sort-Object -Property date -Descending | select -First <AMOUNT>
+    $script:latestindex = 0; $latest = $podcasts | Select-Object -Property @{n = "index"; e = { $script:latestindex++ }}, @{n = "date"; e = { [datetime] $_.date }}, title, podcast | Sort-Object -Property date -Descending | select -First <AMOUNT>
 
     $latest
 
