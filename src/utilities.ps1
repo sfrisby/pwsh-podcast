@@ -1,3 +1,7 @@
+[CmdletBinding()]
+param()
+Write-Debug "utilities script sourced"
+
 function confirm_leaf {
     param (
         [parameter(Mandatory, Position = 0)]

@@ -31,52 +31,17 @@ Playing (then exit) the file via VLC at 1.5 times the normal playback speed:
     & $configuration[1].vlc $file --rate 1.5 --play-and-exit
 
 #>
-$cmd = {
+[CmdletBinding()]
+param()
 
-    $Host.UI.RawUI.WindowTitle = 'TEST pwsh podcasts';
-    New-Variable -Name configuration (.\src\setup.ps1);
-    New-Variable -Name stopwatch ([Diagnostics.Stopwatch]::StartNew())
-    New-Variable -Name podcasts (.\src\invoke_then_format_podcasts_episodes.ps1 $configuration[0]);
-    $stopwatch.Stop()
-    . .\src\utilities.ps1;
-    # .\test\show_podcasts.ps1 $podcasts
+Write-Debug "script root - $PSScriptRoot"
 
-    function Show-Recent-Episodes {
-        param (
-            [parameter(Position = 0)]
-            [int] $Count = 10
-        )
-        $script:index = 0;
-        $podcasts | Select-Object -Property @{n = 'index'; e = { ($script:index++) } }, @{n = 'date'; e = { [datetime] $_.date } }, title, podcast | Sort-Object -Property date -Descending | Select-Object -First $Count
-    }
+$wd = $(Split-Path -Parent $PSScriptRoot)
 
-    function Start-Episode-Stream {
-        param (
-            [parameter(Mandatory, Position = 0)]
-            [int] $Episode,
-            [parameter(Position = 1)]
-            [Single] $Rate = 1.5
-        )
-        & $configuration[1].vlc $podcasts[$Episode].url --rate $Rate --play-and-exit
-    }
+Write-Debug "working directory - $wd"
 
-    function Start-Episode-File {
-        param (
-            [parameter(Mandatory, Position = 0)]
-            [string] $File,
-            [parameter(Position = 1)]
-            [Single] $Rate = 1.5
-        )
-        & $configuration[1].vlc $File --rate $Rate --play-and-exit
-    }
+$cmd = Join-Path $PSScriptRoot "commandblock.ps1"
 
-    function Start-Episode-Download {
-        param (
-            [parameter(Mandatory, Position = 0)]
-            [int] $Episode
-        )
-        .\test\invoke_brave_download.ps1 $podcasts[$Episode]
-    }
-}
+Write-Debug "command block - $cmd"
 
-Start-Process pwsh -WorkingDirectory $(Join-Path $PSScriptRoot ".." ".") -WindowStyle Normal -ArgumentList "-NoExit", "-Command `"$($cmd)`"";
+Start-Process pwsh -WorkingDirectory $wd -WindowStyle Normal -ArgumentList "-NoExit", "-File", $cmd

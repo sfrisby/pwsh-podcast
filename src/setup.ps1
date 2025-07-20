@@ -30,7 +30,12 @@ To regenerate setup files they must first be manually deleted prior to
 executing the script from a new powershell instance.
 
 #>
+[CmdletBinding()]
+param()
+
 begin {
+    Write-Debug "start of setup script begin statement"
+
     . $PSScriptRoot\utilities.ps1
 
     Set-Variable -Name 'CONFIG_BASENAME'   -Value "config.json"                                    -Option Constant -Scope Local -ErrorAction stop
@@ -269,14 +274,17 @@ begin {
             if (confirm_leaf $thumbnail) {
                 if ($null -ne $_.thumbnail) {
                     $_.thumbnail = $thumbnail
-                } else {
+                }
+                else {
                     $_ | Add-Member -MemberType NoteProperty -Name 'thumbnail' -Value $thumbnail
                 }
             }
         }
     }
+    Write-Debug "end of setup script begin statement"
 }
 process {
+    Write-Debug "start of setup script process statement"
     if (!(confirm_leaf $CONFIG_FILEPATH)) {
         save_config # default; config template
     }
@@ -292,7 +300,10 @@ process {
     confirm_podcasts_containers $podcasts
     confirm_podcasts_image $podcasts
     save_podcasts $podcasts
+    Write-Debug "end of setup script process statement"
 }
 end {
+    Write-Debug "start of setup script end statement"
     @($podcasts, $config)
+    Write-Debug "end of setup script end statement"
 }
