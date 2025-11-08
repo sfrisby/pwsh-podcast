@@ -44,4 +44,4 @@ $cmd = Join-Path $PSScriptRoot "commandblock.ps1"
 
 Write-Debug "command block - $cmd"
 
-Start-Process pwsh -WorkingDirectory $wd -WindowStyle Normal -ArgumentList "-NoExit", "-File", $cmd
+Start-Process pwsh -WorkingDirectory $wd -WindowStyle Maximized -ArgumentList "-NoExit", "-File", $cmd
