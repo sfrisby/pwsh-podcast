@@ -330,8 +330,7 @@ function format_podcast_query {
         [Microsoft.PowerShell.Commands.WebResponseObject] $Response
     )
     $c = $Response.Content -replace '\u2019', "'"
-    $p = ($c | ConvertFrom-Json -Depth 6).data
-    $p
+    return ($c | ConvertFrom-Json -Depth 6).data
 }
 <#
 
@@ -362,6 +361,5 @@ function invoke_podcasts {
     )
     $r = invoke_podcast_query $Query
     $p = format_podcast_query $r
-    $o = @{ query = $Query; response = $r; podcasts = $p; }
-    $o
+    return @{ query = $Query; response = $r; podcasts = $p; }
 }

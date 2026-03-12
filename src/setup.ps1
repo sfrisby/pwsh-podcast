@@ -150,8 +150,8 @@ begin {
             [array] $Podcasts = @()
         )
         if (confirm_leaf $PODCASTS_FILEPATH) {
-            if ($Podcasts.Count -gt 0) {
-                Set-Content -Path $PODCASTS_FILEPATH -Value $($Podcasts | ConvertTo-Json -Depth 6) -Force -ErrorAction Stop | Out-Null
+            if ($Podcasts.Count -gt 0) { # TODO validate parameter
+                Set-Content -Path $PODCASTS_FILEPATH -Value $($Podcasts | ConvertTo-Json -Depth 6) -Force -ErrorAction Stop | Out-Null # TODO is there a reason for depth of 6?
             }
         }
         else {
