@@ -1,6 +1,7 @@
 <!-- 
+TODO cleanup command : `get-childitem $configuration.local -Filter *.mp3 -Recurse | Remove-Item`
 
-
+TODO open in explorer : `explorer $configuration.local`
 
 TODO elsewhere:
     - search for podcast by name
